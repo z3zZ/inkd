@@ -15,6 +15,13 @@
       <button id="undo" class="tool" title="Undo (Ctrl+Z)" disabled>Undo</button>
       <button id="redo" class="tool" title="Redo (Ctrl+Y)" disabled>Redo</button>
       <button id="clear" class="tool" title="Clear the page">Clear</button>
+      <span class="spacer"></span>
+      <span id="engine" class="engine" hidden>
+        <span id="engine-backend"></span>
+        <label title="Run recognition on the CPU only. Slower, but avoids the GPU entirely.">
+          <input id="force-cpu" type="checkbox" /> Force CPU
+        </label>
+      </span>
     </header>
     <main id="stage" class="stage"></main>
     <aside id="baseline" class="baseline" hidden></aside>

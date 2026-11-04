@@ -5,6 +5,7 @@ import { BaselinePanel } from "./dev/baseline";
 import { runSelfTest } from "./dev/selftest";
 import { LineController } from "./lines/LineController";
 import { createRecognizer } from "./recognition/TauriOnnxRecognizer";
+import { bindEngineControls } from "./settings/engine";
 
 const IDLE_MS = 600;
 
@@ -89,6 +90,7 @@ window.addEventListener("keydown", (e) => {
 setStatus("Write a sum ending in =, then pause.");
 
 if (isTauri()) {
+  bindEngineControls(document.getElementById("engine")!);
   void invoke<string | null>("selftest_dir").then((dir) => {
     if (dir) void runSelfTest(ink, recognizer, controller, setStatus);
   });
