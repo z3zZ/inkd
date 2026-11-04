@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>inkd</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <header class="toolbar" role="toolbar" aria-label="Ink tools">
+      <span class="brand">inkd</span>
+      <button id="tool-pen" class="tool" aria-pressed="true" title="Pen (P)">Pen</button>
+      <button id="tool-eraser" class="tool" aria-pressed="false" title="Stroke eraser (E)">Eraser</button>
+      <span class="sep"></span>
+      <button id="undo" class="tool" title="Undo (Ctrl+Z)" disabled>Undo</button>
+      <button id="redo" class="tool" title="Redo (Ctrl+Y)" disabled>Redo</button>
+      <button id="clear" class="tool" title="Clear the page">Clear</button>
+    </header>
+    <main id="stage" class="stage"></main>
+    <aside id="baseline" class="baseline" hidden></aside>
+    <footer id="status" class="status" role="status" aria-live="polite"></footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
