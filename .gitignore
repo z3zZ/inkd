@@ -1,0 +1,20 @@
+# deps / build
+node_modules/
+dist/
+target/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# model weights are ~1.2 GB: fetch with scripts/fetch-model.sh, never commit
+src-tauri/models/**
+!src-tauri/models/README.md
+
+# python
+.venv/
+__pycache__/
+
+# personal handwriting / eval working files
+step-zero/results/*.tmp
+.DS_Store
+*.log
+.claude/
