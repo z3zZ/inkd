@@ -1,0 +1,183 @@
+{
+  "endToEnd": {
+    "line": "3/4 + 1/2 = (stacked)",
+    "shown": "1.25",
+    "pass": true
+  },
+  "history": {
+    "before": 11,
+    "afterUndo": 0,
+    "afterRedo": 11,
+    "resultGone": true
+  },
+  "proxy": {
+    "summary": {
+      "lines": 20,
+      "correct": 20,
+      "medianMs": 1150,
+      "worstMs": 1455
+    },
+    "rows": [
+      {
+        "id": "01-add",
+        "expected": "12+34=",
+        "latex": "\\[12+34=\\]",
+        "correct": true,
+        "confidence": 0.99997216,
+        "ms": 993
+      },
+      {
+        "id": "02-sub",
+        "expected": "7-5=",
+        "latex": "\\[7-5=\\]",
+        "correct": true,
+        "confidence": 0.99999714,
+        "ms": 1036
+      },
+      {
+        "id": "03-mul",
+        "expected": "6\\times 8=",
+        "latex": "\\[6 \\times 8=\\]",
+        "correct": true,
+        "confidence": 0.9999993,
+        "ms": 1065
+      },
+      {
+        "id": "04-div",
+        "expected": "9\\div 3=",
+        "latex": "\\[9 \\div 3=\\]",
+        "correct": true,
+        "confidence": 0.9999986,
+        "ms": 1079
+      },
+      {
+        "id": "05-frac",
+        "expected": "\\frac{3}{4}+\\frac{1}{2}=",
+        "latex": "\\[\\frac{3}{4}+ \\frac{1}{2}=\\]",
+        "correct": true,
+        "confidence": 0.99998754,
+        "ms": 1438
+      },
+      {
+        "id": "06-frac",
+        "expected": "\\frac{5}{6}-\\frac{1}{3}=",
+        "latex": "\\[\\frac{5}{6}- \\frac{1}{3}=\\]",
+        "correct": true,
+        "confidence": 0.9999959,
+        "ms": 1455
+      },
+      {
+        "id": "07-pow",
+        "expected": "2^{10}=",
+        "latex": "\\[2^{10}=\\]",
+        "correct": true,
+        "confidence": 0.9999924,
+        "ms": 1007
+      },
+      {
+        "id": "08-pow",
+        "expected": "3^2+4^2=",
+        "latex": "\\[3^{2}+4^{2}=\\]",
+        "correct": true,
+        "confidence": 0.99999565,
+        "ms": 1200
+      },
+      {
+        "id": "09-root",
+        "expected": "\\sqrt{16}=",
+        "latex": "\\[\\sqrt{16}=\\]",
+        "correct": true,
+        "confidence": 0.9999979,
+        "ms": 1122
+      },
+      {
+        "id": "10-root",
+        "expected": "\\sqrt{2}+1=",
+        "latex": "\\[\\sqrt{2}+1=\\]",
+        "correct": true,
+        "confidence": 0.9999145,
+        "ms": 1150
+      },
+      {
+        "id": "11-trig",
+        "expected": "\\sin(30)=",
+        "latex": "\\[\\sin \\left( 30 \\right)=\\]",
+        "correct": true,
+        "confidence": 0.9995058,
+        "ms": 1205
+      },
+      {
+        "id": "12-trig",
+        "expected": "\\cos(0)+1=",
+        "latex": "\\[\\cos \\left( 0 \\right)+1=\\]",
+        "correct": true,
+        "confidence": 0.99985516,
+        "ms": 1266
+      },
+      {
+        "id": "13-trig",
+        "expected": "\\tan(45)=",
+        "latex": "\\[\\tan \\left( 45 \\right)=\\]",
+        "correct": true,
+        "confidence": 0.9999589,
+        "ms": 1178
+      },
+      {
+        "id": "14-assign",
+        "expected": "x=5",
+        "latex": "\\[x=5\\]",
+        "correct": true,
+        "confidence": 0.99999386,
+        "ms": 1031
+      },
+      {
+        "id": "15-assign",
+        "expected": "y=2x+1",
+        "latex": "\\[y=2x+1\\]",
+        "correct": true,
+        "confidence": 0.99999785,
+        "ms": 1125
+      },
+      {
+        "id": "16-assign",
+        "expected": "f(x)=x^2+1",
+        "latex": "\\[f(x)=x^{2}+1\\]",
+        "correct": true,
+        "confidence": 0.98955446,
+        "ms": 1285
+      },
+      {
+        "id": "17-brackets",
+        "expected": "(2+3)\\times 4=",
+        "latex": "\\[\\left( 2+3 \\right) \\times 4=\\]",
+        "correct": true,
+        "confidence": 0.9999895,
+        "ms": 1434
+      },
+      {
+        "id": "18-decimal",
+        "expected": "1.5+2.25=",
+        "latex": "\\[1.5+2.25=\\]",
+        "correct": true,
+        "confidence": 0.9999981,
+        "ms": 1145
+      },
+      {
+        "id": "19-var",
+        "expected": "2x+3=",
+        "latex": "\\[2x+3=\\]",
+        "correct": true,
+        "confidence": 0.9999853,
+        "ms": 1074
+      },
+      {
+        "id": "20-frac",
+        "expected": "\\frac{x+1}{2}=",
+        "latex": "\\[\\frac{x+1}{2}=\\]",
+        "correct": true,
+        "confidence": 0.99999064,
+        "ms": 1222
+      }
+    ]
+  }
+}
