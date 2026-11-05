@@ -53,8 +53,30 @@ A GPU error during later use also switches to the CPU and retries that line. Tha
 
 The 20 lines are not handwriting. `src/dev/synthInk.ts` generates them from hand-tuned glyph shapes with small random variation, and they come out tidy (see `proxy/`). This shows that the pipeline works and that the model reads clean pen-style ink. **It does not predict accuracy on real handwriting.** Report: `proxy/selftest.json`.
 
-### Real handwriting: not yet recorded
+### Real handwriting: 18/20 read correctly
 
-The plan's baseline needs 20 lines written with the tablet, so this needs a person. In the app, press Ctrl+Shift+B and work through the prompts. Results are saved to `%LOCALAPPDATA%\app.inkd.desktop\baseline\baseline.json`. Add the score here once it exists.
+Recorded 2026-11-05 with the XP-Pen, GPU encoder and CPU decoder. Median 0.55 s per line, worst 0.88 s.
 
-The plan's gate, acceptable accuracy before moving on, stays open until then. The CROHME-trained backup (CoMER/BTTR) was not evaluated, because it only matters if TexTeller falls short on real handwriting.
+The baseline panel scored 14/20. It compares against the prompt, though, and four lines were written differently from the prompt, mostly by leaving out the final `=`. On every one of those, the model read exactly what was on the page. Scored against what was actually written, it read 18/20.
+
+| Line | Written | Read as | Verdict |
+|---|---|---|---|
+| 03 | `6 × 8` (no `=`) | `6 \times 8` | Correct read |
+| 06 | `5/6 − 1/3` (no `=`) | `5/6- \frac{1}{3}` | Correct read |
+| 08 | `3² + 4²` (no `=`) | `3^2+4^2` | Correct read |
+| 20 | `(x+1)/2 = (stacked)`; the word was copied from the prompt | the same, including the word | Correct read |
+| 11 | `sin(30) =` | `\sin(30^{\circ})=` | **Misread**: added a degree sign |
+| 14 | `x = 5` | `x=s` | **Misread**: 5 as s |
+
+The letter x was read correctly in all four lines that use it (14, 15, 16, 19). Lines with variables, such as `2x + 3 =`, show no answer yet, because variables arrive in milestone 3. That is a solving gap, not a recognition one.
+
+Two prompts were followed differently than intended:
+
+- Line 20 printed "(stacked)" inside the prompt, so it was written as part of the line.
+- Lines 05 and 06 were meant to be stacked fractions but were written inline. The model read `/` fine, so those still count.
+
+The baseline panel now shows instructions apart from the prompt, and reminds you to include `=`.
+
+**Gate: passed.** 18/20 on real handwriting is acceptable to continue. The CROHME-trained backup (CoMER/BTTR) was not needed. The two misreads (5 as s, a stray degree sign) are the kind the planned correction and fine-tune loop (milestone 8) is for.
+
+The handwriting images stay on this machine and are not committed.
