@@ -1,6 +1,8 @@
 //! Step-zero benchmark: runs TexTeller from Rust on every PNG in a folder and prints latency.
 //!
-//!   cargo run --release --bin step_zero -- <image-folder> [--describe]
+//!   cargo run --release --bin step_zero -- <image-folder> [--cpu] [--describe]
+//!
+//! Without --cpu it uses the same GPU-then-CPU logic as the app, and says which one it got.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -9,13 +11,17 @@ use inkd_lib::recognizer::Recognizer;
 
 fn main() -> Result<(), inkd_lib::recognizer::Error> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let folder = args.first().map(PathBuf::from).ok_or("usage: step_zero <image-folder> [--describe]")?;
+    let folder = args.first().map(PathBuf::from).ok_or("usage: step_zero <image-folder> [--cpu] [--describe]")?;
     let model = std::env::var_os("INKD_MODEL_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("texteller"));
 
     let started = Instant::now();
-    let mut recognizer = Recognizer::load(&model)?;
+    let (mut recognizer, gpu_error) = Recognizer::load_best(&model, args.iter().any(|a| a == "--cpu"))?;
+    println!("backend: {:?}", recognizer.backend());
+    if let Some(error) = gpu_error {
+        println!("GPU fell back to CPU: {error}");
+    }
     println!("model load: {} ms", started.elapsed().as_millis());
     if args.iter().any(|a| a == "--describe") {
         println!("{}", recognizer.describe());

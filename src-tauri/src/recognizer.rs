@@ -7,6 +7,8 @@ use std::thread;
 
 use image::imageops::{self, FilterType};
 use image::GrayImage;
+use ort::ep::directml::PerformancePreference;
+use ort::ep::DirectML;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::session::{Session, SessionInputValue};
 use ort::value::{DynValue, Tensor};
@@ -34,25 +36,66 @@ pub struct Recognition {
     pub tokens: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Backend {
+    DirectMl,
+    Cpu,
+}
+
 pub struct Recognizer {
     encoder: Session,
     decoder: Session,
     tokenizer: Tokenizer,
+    backend: Backend,
     /// Name and shape of each KV-cache placeholder the merged decoder needs on its first pass.
     /// That branch ignores their values, and ort cannot create a tensor with a zero dimension.
     empty_past: Vec<(String, [usize; 4])>,
     uses_encoder_mask: bool,
 }
 
-fn open_session(path: &Path) -> Result<Session, Error> {
+fn open_session(path: &Path, backend: Backend) -> Result<Session, Error> {
     let threads = thread::available_parallelism().map(|n| n.get() / 2).unwrap_or(4).max(1);
-    Ok(Session::builder()
+    let mut builder = Session::builder()
         .map_err(|e| e.to_string())?
         .with_optimization_level(GraphOptimizationLevel::Level3)
         .map_err(|e| e.to_string())?
         .with_intra_threads(threads)
-        .map_err(|e| e.to_string())?
-        .commit_from_file(path)?)
+        .map_err(|e| e.to_string())?;
+    if backend == Backend::DirectMl {
+        // DirectML requires sequential execution with memory patterns off. error_on_failure
+        // stops ort quietly continuing on the CPU, so the caller can tell what really happened.
+        let mut provider = DirectML::default().with_performance_preference(PerformancePreference::HighPerformance);
+        // Picks a specific adapter on multi-GPU machines. Also how the fallback path gets tested.
+        if let Some(id) = std::env::var("INKD_DML_DEVICE").ok().and_then(|v| v.parse().ok()) {
+            provider = provider.with_device_id(id);
+        }
+        let provider = provider.build().error_on_failure();
+        builder = builder
+            .with_parallel_execution(false)
+            .map_err(|e| e.to_string())?
+            .with_memory_pattern(false)
+            .map_err(|e| e.to_string())?
+            .with_execution_providers([provider])
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(builder.commit_from_file(path)?)
+}
+
+/// A known line, used to prove a backend reads correctly before relying on it. Checking for
+/// errors is not enough: DirectML can run a graph successfully and still return garbage.
+const SMOKE_TEST_PNG: &[u8] = include_bytes!("../assets/smoke-line.png");
+const SMOKE_TEST_LATEX: &str = "x=5";
+
+fn check_smoke_test(model: &mut Recognizer) -> Result<(), Error> {
+    let latex = model.recognise(SMOKE_TEST_PNG)?.latex;
+    let compact: String = latex.chars().filter(|c| !c.is_whitespace()).collect();
+    if compact.contains(SMOKE_TEST_LATEX) {
+        Ok(())
+    } else {
+        let preview: String = latex.chars().take(60).collect();
+        Err(format!("smoke test read \"{preview}\" instead of \"{SMOKE_TEST_LATEX}\"").into())
+    }
 }
 
 /// Prefers an int8 build when one is present. INKD_FLOAT_MODEL forces the original.
@@ -66,9 +109,28 @@ fn pick_model(dir: &Path, stem: &str) -> PathBuf {
 }
 
 impl Recognizer {
-    pub fn load(dir: &Path) -> Result<Self, Error> {
-        let encoder = open_session(&pick_model(dir, "encoder_model"))?;
-        let decoder = open_session(&pick_model(dir, "decoder_model_merged"))?;
+    /// Loads on the GPU through DirectML, or the CPU if `force_cpu` is set or the GPU fails.
+    /// The second value says why the GPU was given up on, if it was.
+    pub fn load_best(dir: &Path, force_cpu: bool) -> Result<(Self, Option<String>), Error> {
+        if force_cpu {
+            return Ok((Self::load(dir, Backend::Cpu)?, None));
+        }
+        let attempt = Self::load(dir, Backend::DirectMl).and_then(|mut model| {
+            check_smoke_test(&mut model)?;
+            Ok(model)
+        });
+        match attempt {
+            Ok(model) => Ok((model, None)),
+            Err(error) => Ok((Self::load(dir, Backend::Cpu)?, Some(error.to_string()))),
+        }
+    }
+
+    pub fn load(dir: &Path, backend: Backend) -> Result<Self, Error> {
+        let encoder = open_session(&pick_model(dir, "encoder_model"), backend)?;
+        // The decoder stays on the CPU: on DirectML it runs without error but produces garbage
+        // (see step-zero/RESULTS.md). INKD_DML_DECODER is there to re-test after an ort upgrade.
+        let decoder_backend = if std::env::var_os("INKD_DML_DECODER").is_some() { backend } else { Backend::Cpu };
+        let decoder = open_session(&pick_model(dir, "decoder_model_merged"), decoder_backend)?;
         let tokenizer = Tokenizer::from_file(dir.join("tokenizer.json")).map_err(|e| e.to_string())?;
 
         let config: serde_json::Value = serde_json::from_slice(&std::fs::read(dir.join("config.json"))?)?;
@@ -88,7 +150,11 @@ impl Recognizer {
             .collect();
         let uses_encoder_mask = decoder.inputs().iter().any(|i| i.name() == "encoder_attention_mask");
 
-        Ok(Self { encoder, decoder, tokenizer, empty_past, uses_encoder_mask })
+        Ok(Self { encoder, decoder, tokenizer, backend, empty_past, uses_encoder_mask })
+    }
+
+    pub fn backend(&self) -> Backend {
+        self.backend
     }
 
     pub fn describe(&self) -> String {

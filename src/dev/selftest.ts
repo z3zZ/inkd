@@ -4,6 +4,7 @@ import type { LineController } from "../lines/LineController";
 import { rasterizeStrokes } from "../lines/rasterize";
 import { latexEquivalent } from "../math/engine";
 import type { Recognizer } from "../recognition/Recognizer";
+import { getEngineStatus, setForceCpu } from "../settings/engine";
 import { type BaselineRow, jsonBytes, summarize, writeDevFile } from "./baseline";
 import { synthesizeLine } from "./synthInk";
 import { TEST_LINES } from "./testLines";
@@ -67,6 +68,26 @@ export async function runSelfTest(
       });
     }
     report.proxy = { summary: summarize(rows), rows };
+
+    // Force CPU: the setting switches backend, still reads correctly, and switches back.
+    const checkLine = TEST_LINES[4];
+    const png = await rasterizeStrokes(synthesizeLine(checkLine.synth, 40, 60, 1004));
+    const initial = await getEngineStatus();
+    setStatus("Self-test: Force CPU");
+    const forced = await setForceCpu(true);
+    const onCpu = await recognizer.recognise(png);
+    const restored = await setForceCpu(initial.forceCpu);
+    const onDefault = await recognizer.recognise(png);
+    report.forceCpu = {
+      initial: initial.backend,
+      forced: forced.backend,
+      cpuCorrect: latexEquivalent(onCpu.latex, checkLine.latex),
+      cpuMs: onCpu.ms,
+      restored: restored.backend,
+      restoredCorrect: latexEquivalent(onDefault.latex, checkLine.latex),
+      restoredMs: onDefault.ms,
+      gpuError: restored.gpuError,
+    };
   } catch (error) {
     report.error = error instanceof Error ? error.message : String(error);
   }

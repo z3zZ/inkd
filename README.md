@@ -56,6 +56,16 @@ bash scripts/selftest.sh
 
 The self-test opens the real app, feeds generated strokes through the whole pipeline, and writes its report and line images to `step-zero/proxy/`.
 
+## GPU
+
+Recognition runs the encoder on the GPU through DirectML and the decoder on the CPU, and falls back to the CPU entirely if the GPU fails. The toolbar shows which is in use. **Force CPU** in the toolbar turns the GPU off and is remembered in `%LOCALAPPDATA%\app.inkd.desktop\settings.json`. See [step-zero/RESULTS.md](step-zero/RESULTS.md) for the comparison.
+
+## Workflow
+
+Each milestone gets a feature branch and a pull request. Nothing is pushed directly to `main`.
+
 ## Licences
 
-All dependencies are permissive: Tauri (MIT/Apache-2.0), ONNX Runtime and `ort` (MIT/Apache-2.0), tokenizers (Apache-2.0), perfect-freehand (MIT), mathjs (Apache-2.0), KaTeX (MIT). TexTeller code and weights are Apache-2.0.
+Tauri (MIT/Apache-2.0), ONNX Runtime and `ort` (MIT/Apache-2.0), tokenizers (Apache-2.0), perfect-freehand (MIT), mathjs (Apache-2.0) and KaTeX (MIT) are permissive. TexTeller code and weights are Apache-2.0.
+
+**One exception: `DirectML.dll`.** It is a closed-source Microsoft binary under the Microsoft Software License Terms, not a permissive licence. It is free to use, but it bans reverse engineering, and its redistribution terms need checking before shipping an installer. CPU-only mode doesn't use it for inference, but the app still builds with it.
