@@ -70,6 +70,15 @@ export class BaselinePanel {
     }
     this.el.append(body);
 
+    if (!done) {
+      const line = TEST_LINES[this.index];
+      const hints = [line.hint, line.prompt.endsWith("=") ? "Include the = at the end." : undefined];
+      const hint = document.createElement("p");
+      hint.className = "hint";
+      hint.textContent = hints.filter(Boolean).join(" ");
+      if (hint.textContent) this.el.append(hint);
+    }
+
     if (message) {
       const note = document.createElement("p");
       note.textContent = message;
