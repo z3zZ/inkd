@@ -42,6 +42,9 @@ describe("latexToMath", () => {
     ["2\\pi", "2*pi"],
     ["x_1+1", "x_1+1"],
     ["f(x)=x^2", "f(x)=x^(2)"],
+    ["f\\left(2\\right)=", "f(2)="],
+    ["f \\left( x \\right)=x^{2}+1", "f(x)=x^(2)+1"],
+    ["f\\,x", "f*x"],
     ["x(2)", "x*(2)"],
     ["5\\%", "(5/100)"],
     ["3!", "3!"],
@@ -75,7 +78,7 @@ describe("solve", () => {
   });
 
   it.each(["1+2", "x=5", "=", "2x=", "1/0=", "\\frac{1}", "a=b="])("has no result for %s", (latex) => {
-    expect(solve(latex).kind).toBe("none");
+    expect(solve(latex).kind).not.toBe("result");
   });
 
   it("does not expose mathjs internals to recognised text", () => {

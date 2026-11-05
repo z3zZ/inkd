@@ -21,6 +21,24 @@ async function waitForResult(timeoutMs: number): Promise<string | null> {
   return null;
 }
 
+/** The results on the page, top to bottom. */
+function shownResults(): string[] {
+  return [...document.querySelectorAll<HTMLElement>(".result")]
+    .sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top))
+    .map((el) => el.querySelector(".katex-mathml annotation")?.textContent ?? "");
+}
+
+/** Waits until the page shows exactly `expected`, and returns what it last showed. */
+async function waitForResults(expected: string[], timeoutMs: number): Promise<string[]> {
+  const deadline = performance.now() + timeoutMs;
+  let shown = shownResults();
+  while (JSON.stringify(shown) !== JSON.stringify(expected) && performance.now() < deadline) {
+    await wait(50);
+    shown = shownResults();
+  }
+  return shown;
+}
+
 /**
  * Runs with INKD_SELFTEST=<dir>: drives the real pipeline in the real window, writes the
  * images and a report to <dir>, then closes the app.
@@ -51,6 +69,41 @@ export async function runSelfTest(
     ink.redo();
     report.history = { before, afterUndo, afterRedo: ink.allStrokes.length, resultGone };
     ink.clear();
+
+    // Milestone 3: variables carry down the note, and editing one updates the lines below.
+    setStatus("Self-test: variables");
+    const gap = 100;
+    const xIs5 = synthesizeLine(["x", "=", "5"], 60, 80, 2001);
+    ink.addStrokes(xIs5);
+    ink.addStrokes(synthesizeLine(["2", "x", "="], 60, 80 + gap, 2002));
+    const first = await waitForResults(["10"], 60_000);
+    ink.removeStrokes(xIs5);
+    const whileEditing = await waitForResults([], 5_000);
+    ink.addStrokes(synthesizeLine(["x", "=", "7"], 60, 80, 2003));
+    const edited = await waitForResults(["14"], 60_000);
+    ink.clear();
+
+    const fnLines = [
+      synthesizeLine(["f", "(", "x", ")", "=", "x", { sup: ["2"] }, "+", "1"], 60, 80, 2004),
+      synthesizeLine(["f", "(", "2", ")", "="], 60, 80 + gap, 2005),
+      synthesizeLine(["3", "+", "4", "="], 60, 80 + 2 * gap, 2006),
+    ];
+    for (const strokes of fnLines) ink.addStrokes(strokes);
+    const functions = await waitForResults(["5", "7"], 60_000);
+    const functionsReadAs: string[] = [];
+    for (const strokes of fnLines) functionsReadAs.push((await recognizer.recognise(await rasterizeStrokes(strokes))).latex);
+    await wait(150);
+    await writeDevFile("variables-canvas.png", new Uint8Array(await (await ink.toPngBlob()).arrayBuffer()));
+    ink.clear();
+    report.variables = {
+      first,
+      whileEditing,
+      edited,
+      functions,
+      functionsReadAs,
+      pass:
+        JSON.stringify([first, whileEditing, edited, functions]) === JSON.stringify([["10"], [], ["14"], ["5", "7"]]),
+    };
 
     const rows: BaselineRow[] = [];
     for (const [i, line] of TEST_LINES.entries()) {

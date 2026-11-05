@@ -193,8 +193,12 @@ class Translator {
       if (!/^\w+$/.test(sub)) throw new LatexError("unsupported subscript");
       return `${text}_${sub}`;
     }
-    if (FUNCTION_LETTERS.has(text) && this.isSymbol("(")) {
-      return `${text}(${this.group("(", ")")})`;
+    if (FUNCTION_LETTERS.has(text)) {
+      // The model often writes "f\left(2\right)", so look past \left before deciding.
+      const before = this.pos;
+      this.skipIgnored();
+      if (this.isSymbol("(")) return `${text}(${this.group("(", ")")})`;
+      this.pos = before;
     }
     return text;
   }

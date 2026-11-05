@@ -6,7 +6,7 @@ See [PLAN.md](PLAN.md) for the roadmap and [step-zero/RESULTS.md](step-zero/RESU
 
 ## Status
 
-Milestones 0–2 of the plan: pressure ink, pen eraser end, stroke eraser, undo/redo, and live solving of a line ending in `=`.
+Milestones 0–3 of the plan: pressure ink, pen eraser end, stroke eraser, undo/redo, live solving of lines ending in `=`, and variables and functions shared down the page (`x = 5`, then `2x =`; `f(x) = x^2 + 1`, then `f(2) =`).
 
 ## Setup
 

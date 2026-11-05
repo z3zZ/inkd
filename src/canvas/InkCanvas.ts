@@ -108,6 +108,12 @@ export class InkCanvas {
     if (strokes.length) this.commit({ added: strokes, removed: [] });
   }
 
+  /** Removes strokes as one undoable step. Used by non-pointer input such as the self-test. */
+  removeStrokes(strokes: Stroke[]): void {
+    const present = strokes.filter((s) => this.strokes.includes(s));
+    if (present.length) this.commit({ added: [], removed: present });
+  }
+
   toPngBlob(): Promise<Blob> {
     return new Promise((resolve, reject) => {
       this.base.toBlob((b) => (b ? resolve(b) : reject(new Error("canvas export failed"))), "image/png");
