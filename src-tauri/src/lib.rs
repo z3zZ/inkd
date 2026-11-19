@@ -284,6 +284,51 @@ fn note_delete(app: AppHandle, id: String) -> Result<(), String> {
     std::fs::rename(&path, trash.join(format!("{id}.json"))).map_err(|e| e.to_string())
 }
 
+/// One hand correction: what the model read a line as, and what it should have been.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Correction {
+    id: String,
+    original: String,
+    corrected: String,
+    at: f64,
+}
+
+/// Keeps a corrected line for fine-tuning: its image as `<id>.png`, and a row in `corrections.jsonl`.
+/// The body is a 4-byte little-endian length, that many bytes of JSON (`Correction`), then the PNG.
+#[tauri::command]
+fn correction_log(app: AppHandle, request: Request<'_>) -> Result<(), String> {
+    let body = raw_body(&request)?;
+    let len = body.get(..4).ok_or("body too short")?;
+    let len = u32::from_le_bytes(len.try_into().unwrap()) as usize;
+    let json = body.get(4..4 + len).ok_or("body too short")?;
+    let png = &body[4 + len..];
+    if !png.starts_with(b"\x89PNG") {
+        return Err("expected a PNG image".into());
+    }
+    let correction: Correction = serde_json::from_slice(json).map_err(|e| e.to_string())?;
+
+    let dir = match std::env::var_os(SELFTEST_ENV) {
+        Some(dir) => PathBuf::from(dir).join("corrections"),
+        None => app.path().app_data_dir().map_err(|e| e.to_string())?.join("corrections"),
+    };
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let image = note_path(&dir, &correction.id)?.with_extension("png");
+    std::fs::write(&image, png).map_err(|e| e.to_string())?;
+
+    let mut row = serde_json::to_value(&correction).map_err(|e| e.to_string())?;
+    row["image"] = format!("{}.png", correction.id).into();
+    let mut line = serde_json::to_string(&row).map_err(|e| e.to_string())?;
+    line.push('\n');
+    use std::io::Write;
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("corrections.jsonl"))
+        .and_then(|mut f| f.write_all(line.as_bytes()))
+        .map_err(|e| e.to_string())
+}
+
 pub fn run() {
     let engine = Engine::default();
     tauri::Builder::default()
@@ -323,7 +368,8 @@ pub fn run() {
             notes_list,
             note_load,
             note_save,
-            note_delete
+            note_delete,
+            correction_log
         ])
         .run(tauri::generate_context!())
         .expect("failed to start inkd");

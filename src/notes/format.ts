@@ -14,6 +14,8 @@ export interface SavedStroke {
 export interface SavedLine {
   strokes: number[];
   latex: string;
+  /** Present when the reading was corrected by hand: what the model read. */
+  original?: string;
 }
 
 export interface NoteMeta {
@@ -111,9 +113,13 @@ export function parseNote(json: string): OpenNote {
     check(s.points.length >= 3 && s.points.length % 3 === 0 && s.points.every(isNumber), `stroke ${i} points`);
     return loadStroke(s);
   });
-  const lines = note.lines!.filter(
-    (l): l is SavedLine => Array.isArray(l?.strokes) && l.strokes.every(isNumber) && typeof l.latex === "string",
-  );
+  const lines = note.lines!
+    .filter(
+      (l): l is SavedLine => Array.isArray(l?.strokes) && l.strokes.every(isNumber) && typeof l.latex === "string",
+    )
+    .map(({ strokes, latex, original }) =>
+      typeof original === "string" ? { strokes, latex, original } : { strokes, latex },
+    );
   const preview = Array.isArray(note.preview) ? note.preview.filter((p) => typeof p === "string") : [];
 
   return {

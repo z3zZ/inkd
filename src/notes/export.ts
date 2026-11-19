@@ -1,22 +1,12 @@
 import { type BBox, type Stroke, strokeBBox, strokePath, unionBBox } from "../canvas/strokes";
 import type { ExportLine } from "../lines/LineController";
-
-/** The model wraps lines in display delimiters such as `\[ … \]`; the export adds none of its own. */
-function stripDelimiters(latex: string): string {
-  const text = latex.trim();
-  for (const [open, close] of [["\\[", "\\]"], ["$$", "$$"], ["\\(", "\\)"], ["$", "$"]]) {
-    if (text.length >= open.length + close.length && text.startsWith(open) && text.endsWith(close)) {
-      return text.slice(open.length, text.length - close.length).trim();
-    }
-  }
-  return text;
-}
+import { stripMathDelimiters } from "../math/latexToMath";
 
 /** The note as LaTeX, one line per written line, with answers filled in after the `=`. */
 export function noteLatex(lines: readonly Pick<ExportLine, "latex" | "result">[]): string {
   return lines
     .map(({ latex, result }) => {
-      const text = stripDelimiters(latex);
+      const text = stripMathDelimiters(latex);
       return result && text.endsWith("=") ? `${text} ${result.value}` : text;
     })
     .join("\n");

@@ -264,7 +264,7 @@ class Translator {
 }
 
 /** Removes the display-math wrapper the model puts around its output. */
-function stripMathDelimiters(latex: string): string {
+export function stripMathDelimiters(latex: string): string {
   const text = latex.trim();
   for (const [open, close] of [["\\[", "\\]"], ["\\(", "\\)"], ["$$", "$$"], ["$", "$"]]) {
     if (text.length >= open.length + close.length && text.startsWith(open) && text.endsWith(close)) {

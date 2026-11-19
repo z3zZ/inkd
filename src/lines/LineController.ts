@@ -37,6 +37,8 @@ interface LineState {
   dirty: boolean;
   /** What the line was last read as; null while its ink is being edited or recognised. */
   latex: string | null;
+  /** When the reading was corrected by hand: what the model had read. Editing the ink clears it. */
+  original: string | null;
   shown: { value: string; left: number; top: number } | null;
   resultEl: HTMLElement | null;
 }
@@ -64,7 +66,7 @@ export class LineController {
   private readonly states = new Map<number, LineState>();
   private readonly overlay: HTMLElement;
   private penDown = false;
-  private primed: Map<string, string> | null = null;
+  private primed: Map<string, SavedLine> | null = null;
 
   constructor(
     host: HTMLElement,
@@ -82,7 +84,7 @@ export class LineController {
    * a line whose strokes match exactly gets its saved reading instead of being recognised again.
    */
   primeReadings(lines: readonly SavedLine[]): void {
-    this.primed = new Map(lines.map((l) => [lineKey(l.strokes), l.latex]));
+    this.primed = new Map(lines.map((l) => [lineKey(l.strokes), l]));
   }
 
   handleChange(change: StrokeChange): void {
@@ -97,11 +99,13 @@ export class LineController {
       const saved = primed?.get(lineKey(line.strokes.map((s) => s.id)));
       if (saved !== undefined) {
         state.dirty = false;
-        state.latex = saved;
+        state.latex = saved.latex;
+        state.original = saved.original ?? null;
         continue;
       }
       state.dirty = true;
       state.latex = null;
+      state.original = null;
       if (!this.penDown) this.arm(line);
     }
     if (gone.length || dirty.length) this.resolve();
@@ -109,7 +113,68 @@ export class LineController {
 
   /** Every line read so far, top to bottom, for saving with the note. */
   readings(): SavedLine[] {
-    return this.readLines().map(({ line, latex }) => ({ strokes: line.strokes.map((s) => s.id), latex }));
+    return this.readLines().map(({ line, latex, state }) => {
+      const strokes = line.strokes.map((s) => s.id);
+      return state.original === null ? { strokes, latex } : { strokes, latex, original: state.original };
+    });
+  }
+
+  /** The line at a point on the page, if any. Generous vertically, so a tap just above or below still finds it. */
+  lineAt(x: number, y: number): Line | null {
+    const SLOP = 12;
+    let best: Line | null = null;
+    let bestDistance = Infinity;
+    for (const line of this.segmenter.all) {
+      const { left, right, top, bottom } = line.bbox;
+      const shown = this.states.get(line.id)?.shown;
+      // The result beside a line counts as part of it.
+      const reach = shown ? Math.max(right, shown.left + 120) : right;
+      if (x < left - SLOP || x > reach + SLOP || y < top - SLOP || y > bottom + SLOP) continue;
+      const distance = Math.abs(y - (top + bottom) / 2);
+      if (distance < bestDistance) {
+        best = line;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  /** What a line reads as now, and what the model read if that was corrected. Null while it is still being read. */
+  readingOf(lineId: number): { latex: string; original: string | null } | null {
+    const state = this.states.get(lineId);
+    return state?.latex == null ? null : { latex: state.latex, original: state.original };
+  }
+
+  /**
+   * Replaces what a line was read as, and solves the note again. Returns what the model had read,
+   * so the caller can log the pair. Returns null if the line is gone or still being read.
+   */
+  correct(lineId: number, latex: string): { original: string } | null {
+    const state = this.states.get(lineId);
+    if (!state || state.latex == null) return null;
+    const original = state.original ?? state.latex;
+    if (latex === original) {
+      state.original = null;
+    } else {
+      state.original = original;
+    }
+    state.latex = latex;
+    this.resolve();
+    return { original };
+  }
+
+  /** Throws away a line's reading, corrected or not, and reads its ink again straight away. */
+  reread(lineId: number): void {
+    const line = this.segmenter.all.find((l) => l.id === lineId);
+    const state = this.states.get(lineId);
+    if (!line || !state) return;
+    clearTimeout(state.timer);
+    state.revision++;
+    state.latex = null;
+    state.original = null;
+    state.dirty = true;
+    this.resolve();
+    void this.run(line);
   }
 
   /** Every line read so far, top to bottom, with the result shown beside it, for export. */
@@ -155,7 +220,7 @@ export class LineController {
   private stateOf(id: number): LineState {
     let state = this.states.get(id);
     if (!state) {
-      state = { revision: 0, timer: undefined, dirty: false, latex: null, shown: null, resultEl: null };
+      state = { revision: 0, timer: undefined, dirty: false, latex: null, original: null, shown: null, resultEl: null };
       this.states.set(id, state);
     }
     return state;

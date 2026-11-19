@@ -14,6 +14,15 @@ export class UnavailableRecognizer implements Recognizer {
   }
 }
 
+/** Browser preview with ?fake-reader: reads every line as 3+4=, so the UI around results can be tried. */
+export class FakeRecognizer implements Recognizer {
+  async recognise(): Promise<Recognition> {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return { latex: String.raw`\[3+4=\]`, confidence: 1, ms: 150 };
+  }
+}
+
 export function createRecognizer(): Recognizer {
-  return isTauri() ? new TauriOnnxRecognizer() : new UnavailableRecognizer();
+  if (isTauri()) return new TauriOnnxRecognizer();
+  return new URLSearchParams(location.search).has("fake-reader") ? new FakeRecognizer() : new UnavailableRecognizer();
 }

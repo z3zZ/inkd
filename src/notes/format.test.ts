@@ -37,6 +37,16 @@ describe("note files", () => {
     expect(() => parseNote(JSON.stringify(badPoints))).toThrow(NoteFormatError);
   });
 
+  it("keeps what the model read when a line was corrected", () => {
+    const lines = [
+      { strokes: [1], latex: "x=5", original: "\[x=s\]" },
+      { strokes: [2], latex: "2x=" },
+    ];
+    const note = parseNote(JSON.stringify(serializeNote(meta, [stroke(1, [[0, 0, 0.5]]), stroke(2, [[0, 50, 0.5]])], lines)));
+    expect(note.lines).toEqual(lines);
+    expect("original" in note.lines[1]).toBe(false);
+  });
+
   it("drops damaged readings but keeps the ink", () => {
     const good = serializeNote(meta, [stroke(1, [[0, 0, 0.5]])], []);
     const note = parseNote(JSON.stringify({ ...good, lines: [{ strokes: "1", latex: 4 }, { strokes: [1], latex: "2=" }] }));

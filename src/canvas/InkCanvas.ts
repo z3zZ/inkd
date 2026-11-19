@@ -22,12 +22,17 @@ export interface InkCanvasEvents {
   onPenUp?: () => void;
   onScroll?: (scrollY: number) => void;
   onHistory?: (canUndo: boolean, canRedo: boolean) => void;
+  /** Right-click, or the pen's barrel button. x, y on the page; clientX, clientY on screen. */
+  onSecondary?: (x: number, y: number, clientX: number, clientY: number) => void;
 }
 
 const ERASER_RADIUS = 10;
 /** Pointer Events: button 5 / buttons bit 32 is the pen's eraser end. */
 const ERASER_BUTTON = 5;
 const ERASER_BUTTONS_BIT = 32;
+/** Right mouse button, and the barrel button on most pens. */
+const SECONDARY_BUTTON = 2;
+const SECONDARY_BUTTONS_BIT = 2;
 const INK = "#1d2433";
 
 export class InkCanvas {
@@ -197,6 +202,14 @@ export class InkCanvas {
     // Fingers and palms never ink; a resting hand must not leave marks.
     if (e.pointerType === "touch" || this.activePointer !== null) return;
     const isEraserEnd = e.button === ERASER_BUTTON || (e.buttons & ERASER_BUTTONS_BIT) !== 0;
+    const isSecondary =
+      !isEraserEnd && (e.button === SECONDARY_BUTTON || (e.pointerType === "pen" && (e.buttons & SECONDARY_BUTTONS_BIT) !== 0));
+    if (isSecondary) {
+      e.preventDefault();
+      const [x, y] = this.toPoint(e);
+      this.events.onSecondary?.(x, y, e.clientX, e.clientY);
+      return;
+    }
     if (e.pointerType === "mouse" && e.button !== 0) return;
 
     e.preventDefault();

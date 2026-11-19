@@ -1,9 +1,13 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import "katex/dist/katex.min.css";
 import { InkCanvas, type Tool } from "./canvas/InkCanvas";
+import { logCorrection } from "./corrections/CorrectionLog";
+import { CorrectionPopover } from "./corrections/CorrectionPopover";
 import { BaselinePanel } from "./dev/baseline";
 import { runSelfTest } from "./dev/selftest";
 import { LineController } from "./lines/LineController";
+import type { Line } from "./lines/LineSegmenter";
+import { stripMathDelimiters } from "./math/latexToMath";
 import { noteLatex, renderNotePng } from "./notes/export";
 import { NoteSession } from "./notes/NoteSession";
 import { displayTitle, NotesPanel } from "./notes/NotesPanel";
@@ -24,7 +28,9 @@ const titleInput = document.getElementById("note-title") as HTMLInputElement;
 const copyLatexButton = document.getElementById("copy-latex") as HTMLButtonElement;
 const copyImageButton = document.getElementById("copy-image") as HTMLButtonElement;
 
-function setStatus(message: string, latex?: string, isError = false): void {
+const FIX_HINT = "Right-click a line, or press the pen button on it, to fix a misread.";
+
+function setStatus(message: string, latex?: string, isError = false, onFix?: () => void): void {
   statusEl.replaceChildren();
   const text = document.createElement("span");
   text.textContent = message;
@@ -33,6 +39,11 @@ function setStatus(message: string, latex?: string, isError = false): void {
   if (latex) {
     const code = document.createElement("code");
     code.textContent = latex;
+    if (onFix) {
+      code.className = "fixable";
+      code.title = "Click to correct this line";
+      code.addEventListener("click", onFix);
+    }
     statusEl.append(code);
   }
 }
@@ -41,10 +52,12 @@ const recognizer = createRecognizer();
 
 const controller = new LineController(stage, recognizer, IDLE_MS, {
   onRecognising: () => setStatus("Recognising…"),
-  onOutcome: ({ recognition, note }) => {
+  onOutcome: ({ line, recognition, note }) => {
     const seconds = (recognition.ms / 1000).toFixed(2);
     const confidence = Math.round(recognition.confidence * 100);
-    setStatus(`${seconds}s · ${confidence}% confident${note ? ` · ${note}` : ""}`, recognition.latex);
+    setStatus(`${seconds}s · ${confidence}% confident${note ? ` · ${note}` : ""}`, recognition.latex, false, () =>
+      openCorrection(line),
+    );
     session.changed();
   },
   onError: (message) => setStatus(message, undefined, true),
@@ -52,12 +65,19 @@ const controller = new LineController(stage, recognizer, IDLE_MS, {
 
 const ink = new InkCanvas(stage, {
   onChange: (change) => {
+    // The line being corrected may just have changed under the editor.
+    correction.close();
     controller.handleChange(change);
     session.changed();
   },
   onPenDown: () => controller.handlePenDown(),
   onPenUp: () => controller.handlePenUp(),
   onScroll: (y) => controller.setScroll(y),
+  onSecondary: (x, y) => {
+    const line = controller.lineAt(x, y);
+    if (line) openCorrection(line);
+    else setStatus(`Nothing written there. ${FIX_HINT}`);
+  },
   onHistory: (canUndo, canRedo) => {
     undoButton.disabled = !canUndo;
     redoButton.disabled = !canRedo;
@@ -75,6 +95,41 @@ eraserButton.addEventListener("click", () => selectTool("eraser"));
 undoButton.addEventListener("click", () => ink.undo());
 redoButton.addEventListener("click", () => ink.redo());
 clearButton.addEventListener("click", () => ink.clear());
+
+const correction = new CorrectionPopover(document.body);
+
+function openCorrection(line: Line): void {
+  const reading = controller.readingOf(line.id);
+  if (!reading) {
+    setStatus("That line is still being read. Try again in a moment.");
+    return;
+  }
+  const stage = document.getElementById("stage")!.getBoundingClientRect();
+  correction.open({
+    ...reading,
+    left: stage.left + line.bbox.left,
+    top: stage.top + line.bbox.bottom - ink.scroll + 8,
+    onSave: (latex) => {
+      const original = reading.original ?? reading.latex;
+      // Typing back exactly what the model read undoes the correction.
+      const undone = latex === stripMathDelimiters(original);
+      const result = controller.correct(line.id, undone ? original : latex);
+      if (!result) return;
+      session.changed();
+      if (undone) {
+        setStatus("Back to what the model read.", original);
+        return;
+      }
+      setStatus("Corrected, and kept for training the model on your handwriting.", latex, false, () =>
+        openCorrection(line),
+      );
+      logCorrection(line.strokes, { original: result.original, corrected: latex }).catch((error) =>
+        setStatus(`Corrected, but could not keep it for training: ${error}`, latex, true),
+      );
+    },
+    onReread: () => controller.reread(line.id),
+  });
+}
 
 const session = new NoteSession(createNoteStore(), ink, controller, {
   onCurrent: (meta) => {
@@ -163,7 +218,7 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-setStatus("Write a sum ending in =, then pause.");
+setStatus(`Write a sum ending in =, then pause. ${FIX_HINT}`);
 
 if (isTauri()) {
   bindEngineControls(document.getElementById("engine")!);

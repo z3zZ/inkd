@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { InkCanvas } from "../canvas/InkCanvas";
+import { strokeBBox, unionBBox } from "../canvas/strokes";
+import { logCorrection } from "../corrections/CorrectionLog";
 import type { LineController } from "../lines/LineController";
 import { noteLatex, renderNotePng } from "../notes/export";
 import type { NoteSession } from "../notes/NoteSession";
@@ -145,6 +147,49 @@ export async function runSelfTest(
       functionsReadAs,
       pass:
         JSON.stringify([first, whileEditing, edited, functions]) === JSON.stringify([["10"], [], ["14"], ["5", "7"]]),
+    };
+
+    // Milestone 8: a corrected reading drives the result, survives reopening, and "read again" undoes it.
+    setStatus("Self-test: corrections");
+    const sum = synthesizeLine(["3", "+", "4", "="], 60, 80, 3001);
+    ink.addStrokes(sum);
+    const beforeFix = await waitForResults(["7"], 60_000);
+    const box = unionBBox(sum.map(strokeBBox));
+    const target = controller.lineAt((box.left + box.right) / 2, (box.top + box.bottom) / 2);
+    const fixed = target ? controller.correct(target.id, "3+5=") : null;
+    const afterFix = await waitForResults(["8"], 2_000);
+    let logged = false;
+    if (fixed && target) {
+      await logCorrection(target.strokes, { original: fixed.original, corrected: "3+5=" });
+      logged = true;
+    }
+    const savedOriginal = controller.readings()[0]?.original ?? null;
+    await session.flush();
+    const fixId = session.current.id;
+    await session.create();
+    await session.open(fixId);
+    const reopenedFix = { pending: controller.pending, results: await waitForResults(["8"], 500) };
+    const reopenedTarget = controller.lineAt((box.left + box.right) / 2, (box.top + box.bottom) / 2);
+    if (reopenedTarget) controller.reread(reopenedTarget.id);
+    const afterReread = await waitForResults(["7"], 60_000);
+    const originalAfterReread = controller.readings()[0]?.original ?? null;
+    await session.remove(fixId);
+    report.corrections = {
+      beforeFix,
+      found: target !== null,
+      afterFix,
+      savedOriginal,
+      logged,
+      reopenedFix,
+      afterReread,
+      originalAfterReread,
+      pass:
+        JSON.stringify([beforeFix, afterFix, reopenedFix.results, afterReread]) ===
+          JSON.stringify([["7"], ["8"], ["8"], ["7"]]) &&
+        savedOriginal !== null &&
+        logged &&
+        !reopenedFix.pending &&
+        originalAfterReread === null,
     };
 
     const rows: BaselineRow[] = [];
