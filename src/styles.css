@@ -82,6 +82,92 @@ body { display: grid; grid-template-rows: 40px 1fr 26px; }
 .status .error { color: var(--error); }
 .status code { font: 12px Consolas, monospace; user-select: text; }
 
+.tool.primary { background: var(--accent); color: #fff; }
+.tool.primary:hover { background: #1f3a5b; }
+
+.note-title-input {
+  width: 180px;
+  height: 28px;
+  margin-left: 4px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  user-select: text;
+  text-overflow: ellipsis;
+}
+.note-title-input:hover { border-color: var(--chrome-line); }
+.note-title-input:focus { outline: none; border-color: var(--accent); background: #fff; }
+.note-title-input::placeholder { color: var(--chrome-text); opacity: .7; font-weight: 400; }
+
+.notes {
+  position: fixed;
+  top: 40px;
+  bottom: 26px;
+  left: 0;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  background: var(--chrome);
+  border-right: 1px solid var(--chrome-line);
+  box-shadow: 2px 0 12px rgb(0 0 0 / .06);
+  z-index: 2;
+}
+.notes[hidden] { display: none; }
+.notes-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px; }
+.notes-header h2 { margin: 0; font-size: 13px; color: var(--chrome-text); }
+.notes-list { flex: 1; margin: 0; padding: 0 8px 12px; overflow-y: auto; list-style: none; }
+.notes-empty { padding: 12px 6px; color: var(--chrome-text); }
+.note-item { position: relative; margin-bottom: 4px; border-radius: 8px; }
+.note-item:hover, .note-item.current { background: #e6e3d9; }
+.note-open {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.note-open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.note-title { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.note-date { color: var(--chrome-text); font-size: 11px; }
+.note-preview {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--chrome-text);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  /* Leaves room for the delete button, which shows on hover. */
+  padding-right: 52px;
+}
+.note-delete {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--chrome-line);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--chrome-text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+}
+.note-item:hover .note-delete, .note-item:focus-within .note-delete, .note-delete.armed { opacity: 1; }
+.note-delete.armed { border-color: var(--error); background: var(--error); color: #fff; }
+
 .baseline {
   position: fixed;
   top: 52px;

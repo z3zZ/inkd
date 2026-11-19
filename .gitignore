@@ -18,3 +18,6 @@ step-zero/results/*.tmp
 .DS_Store
 *.log
 .claude/
+
+# notes written by the self-test
+step-zero/proxy/notes/

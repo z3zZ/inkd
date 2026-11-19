@@ -1,6 +1,8 @@
 import katex from "katex";
 import type { StrokeChange } from "../canvas/InkCanvas";
+import type { BBox } from "../canvas/strokes";
 import { type Solution, solveNote } from "../math/engine";
+import { lineKey, type SavedLine } from "../notes/format";
 import type { Recognition, Recognizer } from "../recognition/Recognizer";
 import { type Line, LineSegmenter } from "./LineSegmenter";
 import { rasterizeStrokes } from "./rasterize";
@@ -13,6 +15,13 @@ export interface LineOutcome {
   /** The value shown beside the line, or null when the line has no result. */
   value: string | null;
   note: string | null;
+}
+
+export interface ExportLine {
+  latex: string;
+  bbox: BBox;
+  /** The result as shown on the page, in page coordinates; its top is the vertical centre. */
+  result: { value: string; left: number; top: number } | null;
 }
 
 export interface LineControllerEvents {
@@ -55,6 +64,7 @@ export class LineController {
   private readonly states = new Map<number, LineState>();
   private readonly overlay: HTMLElement;
   private penDown = false;
+  private primed: Map<string, string> | null = null;
 
   constructor(
     host: HTMLElement,
@@ -67,17 +77,60 @@ export class LineController {
     host.append(this.overlay);
   }
 
+  /**
+   * Readings saved with a note. Used for the very next change only (the note being loaded):
+   * a line whose strokes match exactly gets its saved reading instead of being recognised again.
+   */
+  primeReadings(lines: readonly SavedLine[]): void {
+    this.primed = new Map(lines.map((l) => [lineKey(l.strokes), l.latex]));
+  }
+
   handleChange(change: StrokeChange): void {
+    const primed = this.primed;
+    this.primed = null;
     const { dirty, gone } = this.segmenter.update(change.added, change.removed);
     for (const id of gone) this.forget(id);
     for (const line of dirty) {
       const state = this.stateOf(line.id);
       state.revision++;
+      clearTimeout(state.timer);
+      const saved = primed?.get(lineKey(line.strokes.map((s) => s.id)));
+      if (saved !== undefined) {
+        state.dirty = false;
+        state.latex = saved;
+        continue;
+      }
       state.dirty = true;
       state.latex = null;
       if (!this.penDown) this.arm(line);
     }
     if (gone.length || dirty.length) this.resolve();
+  }
+
+  /** Every line read so far, top to bottom, for saving with the note. */
+  readings(): SavedLine[] {
+    return this.readLines().map(({ line, latex }) => ({ strokes: line.strokes.map((s) => s.id), latex }));
+  }
+
+  /** Every line read so far, top to bottom, with the result shown beside it, for export. */
+  exportLines(): ExportLine[] {
+    return this.readLines().map(({ line, latex, state }) => ({
+      latex,
+      bbox: line.bbox,
+      result: state.shown,
+    }));
+  }
+
+  /** Whether any line is still waiting to be read. */
+  get pending(): boolean {
+    return this.segmenter.all.some((line) => this.states.get(line.id)?.latex == null);
+  }
+
+  private readLines() {
+    return this.segmenter.all
+      .map((line) => ({ line, state: this.states.get(line.id)!, latex: this.states.get(line.id)?.latex }))
+      .filter((r): r is { line: Line; state: LineState; latex: string } => r.latex != null)
+      .sort((a, b) => a.line.bbox.top - b.line.bbox.top);
   }
 
   handlePenDown(): void {

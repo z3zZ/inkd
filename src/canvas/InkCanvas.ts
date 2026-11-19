@@ -3,6 +3,7 @@ import {
   type InkPoint,
   liveStrokePath,
   newStrokeId,
+  reserveStrokeIds,
   type Stroke,
   strokeHit,
   strokePath,
@@ -101,6 +102,22 @@ export class InkCanvas {
 
   clear(): void {
     if (this.strokes.length) this.commit({ added: [], removed: [...this.strokes] });
+  }
+
+  /**
+   * Replaces the page with another note's strokes. Not undoable: history belongs to the note
+   * being left, so it is dropped, and the view goes back to the top.
+   */
+  load(strokes: Stroke[]): void {
+    if (this.activePointer !== null) return;
+    reserveStrokeIds(strokes);
+    const removed = this.strokes;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.scrollY = 0;
+    this.events.onScroll?.(0);
+    this.strokes = [];
+    this.apply({ added: strokes, removed });
   }
 
   /** Adds finished strokes as one undoable step. Used by non-pointer input such as the self-test. */

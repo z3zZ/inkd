@@ -27,6 +27,11 @@ export function newStrokeId(): number {
   return nextStrokeId++;
 }
 
+/** Keeps new ids above those of strokes loaded from a note, so ids stay unique on the page. */
+export function reserveStrokeIds(strokes: readonly Stroke[]): void {
+  for (const { id } of strokes) if (id >= nextStrokeId) nextStrokeId = id + 1;
+}
+
 export function strokeBBox(stroke: Stroke): BBox {
   let left = Infinity;
   let top = Infinity;

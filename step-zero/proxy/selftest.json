@@ -10,6 +10,22 @@
     "afterRedo": 11,
     "resultGone": true
   },
+  "notes": {
+    "latex": "f \\left( x \\right)=x^{2}+1\nf \\left( 2 \\right)= 5\n3+4= 7",
+    "blankAfterNew": true,
+    "listed": true,
+    "reopened": {
+      "strokes": 28,
+      "pending": false,
+      "results": [
+        "5",
+        "7"
+      ],
+      "latex": "f \\left( x \\right)=x^{2}+1\nf \\left( 2 \\right)= 5\n3+4= 7"
+    },
+    "goneFromList": true,
+    "pass": true
+  },
   "variables": {
     "first": [
       "10"
@@ -33,8 +49,8 @@
     "summary": {
       "lines": 20,
       "correct": 20,
-      "medianMs": 566,
-      "worstMs": 852
+      "medianMs": 610,
+      "worstMs": 895
     },
     "rows": [
       {
@@ -43,7 +59,7 @@
         "latex": "\\[12+34=\\]",
         "correct": true,
         "confidence": 0.99997216,
-        "ms": 467
+        "ms": 489
       },
       {
         "id": "02-sub",
@@ -51,7 +67,7 @@
         "latex": "\\[7-5=\\]",
         "correct": true,
         "confidence": 0.99999714,
-        "ms": 441
+        "ms": 465
       },
       {
         "id": "03-mul",
@@ -59,7 +75,7 @@
         "latex": "\\[6 \\times 8=\\]",
         "correct": true,
         "confidence": 0.9999993,
-        "ms": 488
+        "ms": 554
       },
       {
         "id": "04-div",
@@ -67,7 +83,7 @@
         "latex": "\\[9 \\div 3=\\]",
         "correct": true,
         "confidence": 0.9999986,
-        "ms": 507
+        "ms": 492
       },
       {
         "id": "05-frac",
@@ -75,7 +91,7 @@
         "latex": "\\[\\frac{3}{4}+ \\frac{1}{2}=\\]",
         "correct": true,
         "confidence": 0.99998754,
-        "ms": 840
+        "ms": 862
       },
       {
         "id": "06-frac",
@@ -83,7 +99,7 @@
         "latex": "\\[\\frac{5}{6}- \\frac{1}{3}=\\]",
         "correct": true,
         "confidence": 0.9999959,
-        "ms": 852
+        "ms": 895
       },
       {
         "id": "07-pow",
@@ -91,7 +107,7 @@
         "latex": "\\[2^{10}=\\]",
         "correct": true,
         "confidence": 0.9999924,
-        "ms": 498
+        "ms": 511
       },
       {
         "id": "08-pow",
@@ -99,7 +115,7 @@
         "latex": "\\[3^{2}+4^{2}=\\]",
         "correct": true,
         "confidence": 0.99999565,
-        "ms": 598
+        "ms": 610
       },
       {
         "id": "09-root",
@@ -107,7 +123,7 @@
         "latex": "\\[\\sqrt{16}=\\]",
         "correct": true,
         "confidence": 0.9999979,
-        "ms": 468
+        "ms": 453
       },
       {
         "id": "10-root",
@@ -115,7 +131,7 @@
         "latex": "\\[\\sqrt{2}+1=\\]",
         "correct": true,
         "confidence": 0.9999145,
-        "ms": 528
+        "ms": 598
       },
       {
         "id": "11-trig",
@@ -123,7 +139,7 @@
         "latex": "\\[\\sin \\left( 30 \\right)=\\]",
         "correct": true,
         "confidence": 0.9995058,
-        "ms": 620
+        "ms": 618
       },
       {
         "id": "12-trig",
@@ -131,7 +147,7 @@
         "latex": "\\[\\cos \\left( 0 \\right)+1=\\]",
         "correct": true,
         "confidence": 0.99985516,
-        "ms": 671
+        "ms": 760
       },
       {
         "id": "13-trig",
@@ -139,7 +155,7 @@
         "latex": "\\[\\tan \\left( 45 \\right)=\\]",
         "correct": true,
         "confidence": 0.9999589,
-        "ms": 616
+        "ms": 644
       },
       {
         "id": "14-assign",
@@ -147,7 +163,7 @@
         "latex": "\\[x=5\\]",
         "correct": true,
         "confidence": 0.99999386,
-        "ms": 492
+        "ms": 564
       },
       {
         "id": "15-assign",
@@ -155,7 +171,7 @@
         "latex": "\\[y=2x+1\\]",
         "correct": true,
         "confidence": 0.99999785,
-        "ms": 562
+        "ms": 589
       },
       {
         "id": "16-assign",
@@ -163,7 +179,7 @@
         "latex": "\\[f(x)=x^{2}+1\\]",
         "correct": true,
         "confidence": 0.98955446,
-        "ms": 682
+        "ms": 707
       },
       {
         "id": "17-brackets",
@@ -171,7 +187,7 @@
         "latex": "\\[\\left( 2+3 \\right) \\times 4=\\]",
         "correct": true,
         "confidence": 0.9999895,
-        "ms": 750
+        "ms": 798
       },
       {
         "id": "18-decimal",
@@ -179,7 +195,7 @@
         "latex": "\\[1.5+2.25=\\]",
         "correct": true,
         "confidence": 0.9999981,
-        "ms": 566
+        "ms": 619
       },
       {
         "id": "19-var",
@@ -187,7 +203,7 @@
         "latex": "\\[2x+3=\\]",
         "correct": true,
         "confidence": 0.9999853,
-        "ms": 497
+        "ms": 524
       },
       {
         "id": "20-frac",
@@ -195,7 +211,7 @@
         "latex": "\\[\\frac{x+1}{2}=\\]",
         "correct": true,
         "confidence": 0.99999064,
-        "ms": 639
+        "ms": 667
       }
     ]
   },
@@ -203,10 +219,10 @@
     "initial": "directml",
     "forced": "cpu",
     "cpuCorrect": true,
-    "cpuMs": 1310,
+    "cpuMs": 1286,
     "restored": "directml",
     "restoredCorrect": true,
-    "restoredMs": 795,
+    "restoredMs": 823,
     "gpuError": null
   }
 }

@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { InkCanvas } from "../canvas/InkCanvas";
 import type { LineController } from "../lines/LineController";
+import { noteLatex, renderNotePng } from "../notes/export";
+import type { NoteSession } from "../notes/NoteSession";
 import { rasterizeStrokes } from "../lines/rasterize";
 import { latexEquivalent } from "../math/engine";
 import type { Recognizer } from "../recognition/Recognizer";
@@ -47,6 +49,7 @@ export async function runSelfTest(
   ink: InkCanvas,
   recognizer: Recognizer,
   controller: LineController,
+  session: NoteSession,
   setStatus: (message: string) => void,
 ): Promise<void> {
   const report: Record<string, unknown> = {};
@@ -94,6 +97,45 @@ export async function runSelfTest(
     for (const strokes of fnLines) functionsReadAs.push((await recognizer.recognise(await rasterizeStrokes(strokes))).latex);
     await wait(150);
     await writeDevFile("variables-canvas.png", new Uint8Array(await (await ink.toPngBlob()).arrayBuffer()));
+
+    // Milestone 6: the note saves itself, and reopening it shows the same results without reading again.
+    setStatus("Self-test: notes");
+    session.rename("Self-test functions");
+    await session.flush();
+    const savedId = session.current.id;
+    const strokeCount = ink.allStrokes.length;
+    const latex = noteLatex(controller.exportLines());
+    const exported = await renderNotePng(ink.allStrokes, controller.exportLines());
+    await writeDevFile("notes-export.png", new Uint8Array(await exported.arrayBuffer()));
+    await session.create();
+    const blankAfterNew = ink.allStrokes.length === 0 && document.querySelector(".result") === null;
+    const listed = (await session.list()).some((n) => n.id === savedId && n.title === "Self-test functions");
+    await session.open(savedId);
+    const reopened = {
+      strokes: ink.allStrokes.length,
+      // Nothing waiting to be read: every line came back with its saved reading.
+      pending: controller.pending,
+      results: await waitForResults(["5", "7"], 500),
+      latex: noteLatex(controller.exportLines()),
+    };
+    await session.remove(savedId);
+    const goneFromList = !(await session.list()).some((n) => n.id === savedId);
+    report.notes = {
+      latex,
+      blankAfterNew,
+      listed,
+      reopened,
+      goneFromList,
+      pass:
+        blankAfterNew &&
+        listed &&
+        reopened.strokes === strokeCount &&
+        !reopened.pending &&
+        JSON.stringify(reopened.results) === JSON.stringify(["5", "7"]) &&
+        reopened.latex === latex &&
+        latex.split(/\n/).filter((l) => /= (5|7)$/.test(l)).length === 2 &&
+        goneFromList,
+    };
     ink.clear();
     report.variables = {
       first,
