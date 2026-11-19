@@ -11,7 +11,13 @@
   },
   "app": {
     "windows": [
-      { "title": "inkd", "width": 1100, "height": 720, "minWidth": 640, "minHeight": 420 }
+      {
+        "title": "inkd",
+        "width": 1100,
+        "height": 720,
+        "minWidth": 640,
+        "minHeight": 420
+      }
     ],
     "security": {
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src ipc: http://ipc.localhost"
@@ -19,7 +25,26 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "redist/DirectML.dll": "DirectML.dll",
+      "licenses/*": "licenses/"
+    },
+    "publisher": "Joshan Randhawa",
+    "shortDescription": "Handwriting maths notes that solve as you write",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }

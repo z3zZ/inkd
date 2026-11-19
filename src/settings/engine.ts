@@ -1,10 +1,20 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 
 export interface EngineStatus {
   backend: "directml" | "cpu" | null;
   forceCpu: boolean;
   gpuError: string | null;
   loadError: string | null;
+  /** The model has not been downloaded yet. */
+  modelMissing: boolean;
+  /** Bytes the first-run download fetches in all. */
+  downloadSize: number;
+}
+
+export interface DownloadProgress {
+  done: number;
+  total: number;
+  stage: "downloading" | "checking";
 }
 
 export function getEngineStatus(): Promise<EngineStatus> {
@@ -15,27 +25,64 @@ export function setForceCpu(forceCpu: boolean): Promise<EngineStatus> {
   return invoke<EngineStatus>("set_force_cpu", { forceCpu });
 }
 
+/** Downloads the model (resuming any earlier attempt), then loads it. Rejects with "cancelled" if stopped. */
+export function downloadModel(onProgress: (p: DownloadProgress) => void): Promise<EngineStatus> {
+  const channel = new Channel<DownloadProgress>();
+  channel.onmessage = onProgress;
+  return invoke<EngineStatus>("model_download", { onProgress: channel });
+}
+
+export function cancelModelDownload(): Promise<void> {
+  return invoke("model_download_cancel");
+}
+
+export interface EngineControls {
+  /** Shows a status that arrived some other way, such as after a download. */
+  show(status: EngineStatus): void;
+}
+
 /** Wires the toolbar's backend label and Force CPU checkbox. */
-export function bindEngineControls(root: HTMLElement): void {
+export function bindEngineControls(
+  root: HTMLElement,
+  /** fromClick: the user clicked "Download model", rather than a status arriving. */
+  events: { onMissing?: (status: EngineStatus, fromClick: boolean) => void } = {},
+): EngineControls {
   const label = root.querySelector<HTMLElement>("#engine-backend")!;
   const checkbox = root.querySelector<HTMLInputElement>("#force-cpu")!;
+  const forceLabel = checkbox.closest("label")!;
+  let missing: EngineStatus | null = null;
 
   const show = (status: EngineStatus) => {
+    missing = status.modelMissing ? status : null;
     checkbox.checked = status.forceCpu;
     checkbox.disabled = false;
+    forceLabel.hidden = status.modelMissing;
     const failed = status.backend === "cpu" && status.gpuError !== null;
-    label.textContent = status.backend === "directml" ? "GPU" : failed ? "CPU (GPU failed)" : status.backend === "cpu" ? "CPU" : "No model";
-    label.className = failed || status.loadError ? "warn" : "";
-    label.title = status.gpuError ?? status.loadError ?? "";
+    label.textContent = status.modelMissing
+      ? "Download model"
+      : status.backend === "directml"
+        ? "GPU"
+        : failed
+          ? "CPU (GPU failed)"
+          : status.backend === "cpu"
+            ? "CPU"
+            : "No model";
+    label.className = status.modelMissing ? "link" : failed || status.loadError ? "warn" : "";
+    label.title = status.modelMissing ? "Download the handwriting model" : (status.gpuError ?? status.loadError ?? "");
+    if (status.modelMissing) events.onMissing?.(status, false);
   };
 
   root.hidden = false;
-  label.textContent = "Loading…";
+  label.textContent = "Loading model…";
   checkbox.disabled = true;
+  label.addEventListener("click", () => {
+    if (missing) events.onMissing?.(missing, true);
+  });
   checkbox.addEventListener("change", () => {
     checkbox.disabled = true;
-    label.textContent = "Loading…";
+    label.textContent = "Loading model…";
     void setForceCpu(checkbox.checked).then(show);
   });
   void getEngineStatus().then(show);
+  return { show };
 }

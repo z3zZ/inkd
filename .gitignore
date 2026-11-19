@@ -22,3 +22,6 @@ step-zero/results/*.tmp
 # notes written by the self-test
 step-zero/proxy/notes/
 step-zero/proxy/corrections/
+
+# DirectML.dll for the installer: fetch with scripts/fetch-redist.sh
+src-tauri/redist/

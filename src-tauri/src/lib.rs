@@ -1,7 +1,11 @@
+pub mod download;
 pub mod recognizer;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+
+use tauri::ipc::Channel;
 
 use recognizer::{Backend, Recognition, Recognizer};
 use serde::{Deserialize, Serialize};
@@ -26,12 +30,17 @@ struct EngineStatus {
     gpu_error: Option<String>,
     /// Why no model could load at all.
     load_error: Option<String>,
+    /// No model files were found: the first-run download is needed.
+    model_missing: bool,
+    /// Bytes the first-run download fetches in all.
+    download_size: u64,
 }
 
 #[derive(Default)]
 struct Slot {
     model: Option<Result<Recognizer, String>>,
     gpu_error: Option<String>,
+    missing: bool,
 }
 
 /// Holds the model. Loading happens under the lock, so callers wait until it is ready.
@@ -41,6 +50,16 @@ struct Engine {
     settings_path: Arc<Mutex<Option<PathBuf>>>,
     settings: Arc<Mutex<Settings>>,
     slot: Arc<Mutex<Slot>>,
+    /// Where the first-run download puts the model.
+    download_dir: Arc<Mutex<Option<PathBuf>>>,
+    downloading: Arc<AtomicBool>,
+    cancel: Arc<AtomicBool>,
+}
+
+/// A model folder is usable once every file is there under its final name. The downloader only
+/// gives a file its final name after checking its hash, so a half-finished download never counts.
+fn has_model(dir: &Path) -> bool {
+    download::MODEL_FILES.iter().all(|f| dir.join(f.name).is_file())
 }
 
 impl Engine {
@@ -50,11 +69,13 @@ impl Engine {
 
     fn load_into(&self, slot: &mut Slot) {
         let dirs = self.model_dirs.lock().unwrap().clone();
-        let Some(dir) = dirs.iter().find(|d| d.join("tokenizer.json").exists()) else {
-            slot.model = Some(Err(format!(
-                "TexTeller model not found. Run scripts/fetch-model.sh. Looked in: {}",
-                dirs.iter().map(|d| d.display().to_string()).collect::<Vec<_>>().join(", ")
-            )));
+        slot.missing = false;
+        let Some(dir) = dirs.iter().find(|d| has_model(d)) else {
+            slot.missing = true;
+            eprintln!("model not found; looked in: {dirs:?}");
+            slot.model = Some(Err(
+                "Lines will be read once the handwriting model is downloaded (see the toolbar).".into(),
+            ));
             return;
         };
         match Recognizer::load_best(dir, self.force_cpu()) {
@@ -79,7 +100,7 @@ impl Engine {
             Err(error) if backend == Backend::DirectMl => {
                 // The GPU can fail after a good start, e.g. a driver reset. Finish on the CPU.
                 let dirs = self.model_dirs.lock().unwrap().clone();
-                let dir = dirs.iter().find(|d| d.join("tokenizer.json").exists()).ok_or("model folder is gone")?;
+                let dir = dirs.iter().find(|d| has_model(d)).ok_or("model folder is gone")?;
                 let mut cpu = Recognizer::load(dir, Backend::Cpu).map_err(|e| e.to_string())?;
                 let result = cpu.recognise(png).map_err(|e| e.to_string());
                 slot.model = Some(Ok(cpu));
@@ -99,7 +120,36 @@ impl Engine {
             Ok(model) => (Some(model.backend()), None),
             Err(error) => (None, Some(error.clone())),
         };
-        EngineStatus { backend, force_cpu: self.force_cpu(), gpu_error: slot.gpu_error.clone(), load_error }
+        EngineStatus {
+            backend,
+            force_cpu: self.force_cpu(),
+            gpu_error: slot.gpu_error.clone(),
+            load_error,
+            model_missing: slot.missing,
+            download_size: download::total_size(),
+        }
+    }
+
+    fn download_model(&self, report: impl FnMut(download::Progress)) -> Result<EngineStatus, String> {
+        if self.downloading.swap(true, Ordering::SeqCst) {
+            return Err("the model is already downloading".into());
+        }
+        self.cancel.store(false, Ordering::SeqCst);
+        let dir = self.download_dir.lock().unwrap().clone();
+        let outcome = match dir {
+            Some(dir) => download::download(&dir, &self.cancel, report),
+            None => Err(download::DownloadError::Failed("no app data folder to download into".into())),
+        };
+        self.downloading.store(false, Ordering::SeqCst);
+        match outcome {
+            Ok(()) => {
+                // Forget the "not found" result, so the next status loads the new model.
+                *self.slot.lock().unwrap() = Slot::default();
+                Ok(self.status())
+            }
+            Err(download::DownloadError::Cancelled) => Err("cancelled".into()),
+            Err(download::DownloadError::Failed(message)) => Err(message),
+        }
     }
 
     fn set_force_cpu(&self, force_cpu: bool) -> Result<EngineStatus, String> {
@@ -153,6 +203,25 @@ async fn set_force_cpu(force_cpu: bool, engine: State<'_, Engine>) -> Result<Eng
     tauri::async_runtime::spawn_blocking(move || engine.set_force_cpu(force_cpu))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// Downloads the model, reporting progress, then loads it and reports what it runs on.
+#[tauri::command]
+async fn model_download(engine: State<'_, Engine>, on_progress: Channel<download::Progress>) -> Result<EngineStatus, String> {
+    let engine = engine.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        engine.download_model(|progress| {
+            let _ = on_progress.send(progress);
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Stops a download. What is already on disk is kept, so the next one resumes.
+#[tauri::command]
+fn model_download_cancel(engine: State<'_, Engine>) {
+    engine.cancel.store(true, Ordering::SeqCst);
 }
 
 #[tauri::command]
@@ -339,7 +408,9 @@ pub fn run() {
                 dirs.push(PathBuf::from(dir));
             }
             if let Ok(data) = app.path().app_local_data_dir() {
-                dirs.push(data.join("models").join("texteller"));
+                let models = data.join("models").join("texteller");
+                *engine.download_dir.lock().unwrap() = Some(models.clone());
+                dirs.push(models);
                 let path = data.join("settings.json");
                 if let Some(saved) = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice(&b).ok()) {
                     *engine.settings.lock().unwrap() = saved;
@@ -369,7 +440,9 @@ pub fn run() {
             note_load,
             note_save,
             note_delete,
-            correction_log
+            correction_log,
+            model_download,
+            model_download_cancel
         ])
         .run(tauri::generate_context!())
         .expect("failed to start inkd");

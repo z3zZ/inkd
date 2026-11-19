@@ -163,6 +163,15 @@ export class LineController {
     return { original };
   }
 
+  /** Reads every line that has no reading yet, such as lines written before the model was ready. */
+  rereadAll(): void {
+    for (const line of this.segmenter.all) {
+      const state = this.states.get(line.id);
+      // Not dirty: not waiting on its idle timer, so not about to be read anyway.
+      if (state && state.latex == null && !state.dirty) void this.run(line);
+    }
+  }
+
   /** Throws away a line's reading, corrected or not, and reads its ink again straight away. */
   reread(lineId: number): void {
     const line = this.segmenter.all.find((l) => l.id === lineId);

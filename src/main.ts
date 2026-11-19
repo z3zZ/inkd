@@ -14,6 +14,7 @@ import { displayTitle, NotesPanel } from "./notes/NotesPanel";
 import { createNoteStore } from "./notes/store";
 import { createRecognizer } from "./recognition/TauriOnnxRecognizer";
 import { bindEngineControls } from "./settings/engine";
+import { ModelSetup } from "./settings/ModelSetup";
 
 const IDLE_MS = 600;
 
@@ -221,7 +222,23 @@ window.addEventListener("keydown", (e) => {
 setStatus(`Write a sum ending in =, then pause. ${FIX_HINT}`);
 
 if (isTauri()) {
-  bindEngineControls(document.getElementById("engine")!);
+  const setup = new ModelSetup(document.body, {
+    onReady: (status) => {
+      engineControls.show(status);
+      setStatus(`Model ready. Write a sum ending in =, then pause. ${FIX_HINT}`);
+      // Lines written while the model was missing failed to read: read them now.
+      controller.rereadAll();
+    },
+  });
+  let shownSetup = false;
+  const engineControls = bindEngineControls(document.getElementById("engine")!, {
+    onMissing: (status, fromClick) => {
+      // Open by itself once per launch; after "Not now" only the toolbar link opens it.
+      if (shownSetup && !fromClick) return;
+      shownSetup = true;
+      setup.show(status);
+    },
+  });
   void invoke<string | null>("selftest_dir").then((dir) => {
     if (dir) void session.create().then(() => runSelfTest(ink, recognizer, controller, session, setStatus));
     else void session.start();

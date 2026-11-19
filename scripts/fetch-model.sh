@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Downloads the Apache-2.0 TexTeller ONNX build into src-tauri/models/texteller.
+# Downloads the Apache-2.0 TexTeller ONNX build into src-tauri/models/texteller, for development.
+# Pinned to the revision the app downloads on first run (src-tauri/src/download.rs).
 set -euo pipefail
 dir="$(cd "$(dirname "$0")/.." && pwd)/src-tauri/models/texteller"
 mkdir -p "$dir"
 for f in tokenizer.json config.json generation_config.json encoder_model.onnx decoder_model_merged.onnx; do
-  curl -fL -C - -o "$dir/$f" "https://huggingface.co/OleehyO/TexTeller/resolve/main/$f"
+  curl -fL -C - -o "$dir/$f" "https://huggingface.co/OleehyO/TexTeller/resolve/7b96df06b9d81cdb129c3bef68b7250bc3e2b0ea/$f"
 done
