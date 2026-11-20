@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { InkCanvas } from "../canvas/InkCanvas";
-import { strokeBBox, unionBBox } from "../canvas/strokes";
+import { type InkPoint, newStrokeId, strokeBBox, unionBBox } from "../canvas/strokes";
 import { logCorrection } from "../corrections/CorrectionLog";
 import type { LineController } from "../lines/LineController";
 import { noteLatex, renderNotePng } from "../notes/export";
@@ -191,6 +191,48 @@ export async function runSelfTest(
         !reopenedFix.pending &&
         originalAfterReread === null,
     };
+
+    // Polish: a scribble over a line erases it in one undoable step; ordinary ink stays.
+    setStatus("Self-test: scratch-out");
+    ink.clear();
+    const victim = synthesizeLine(["3", "+", "4", "="], 60, 80, 4001);
+    const bystander = synthesizeLine(["1", "+", "1", "="], 60, 220, 4002);
+    ink.addStrokes(victim);
+    ink.addStrokes(bystander);
+    const beforeScratch = await waitForResults(["7", "2"], 60_000);
+    const vb = unionBBox(victim.map(strokeBBox));
+    const scribble: InkPoint[] = [];
+    for (let pass = 0; pass <= 10; pass++) {
+      const x = pass % 2 === 0 ? vb.left - 4 : vb.right + 4;
+      const y = vb.top + ((vb.bottom - vb.top) * pass) / 10;
+      scribble.push([x, y, 0.5]);
+    }
+    const dense: InkPoint[] = [];
+    for (let i = 1; i < scribble.length; i++) {
+      for (let t = 0; t < 1; t += 0.1) {
+        const [x0, y0] = scribble[i - 1];
+        const [x1, y1] = scribble[i];
+        dense.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, 0.5]);
+      }
+    }
+    const strokesBefore = ink.allStrokes.length;
+    ink.finishStroke({ id: newStrokeId(), points: dense, simulatePressure: true, size: 4.5, startedAt: 0, endedAt: 0 });
+    const afterScratch = { strokes: ink.allStrokes.length, results: await waitForResults(["2"], 5_000) };
+    ink.undo();
+    const afterUndoScratch = { strokes: ink.allStrokes.length, results: await waitForResults(["7", "2"], 60_000) };
+    report.scratchOut = {
+      beforeScratch,
+      strokesBefore,
+      afterScratch,
+      afterUndoScratch,
+      pass:
+        JSON.stringify(beforeScratch) === JSON.stringify(["7", "2"]) &&
+        afterScratch.strokes === bystander.length &&
+        JSON.stringify(afterScratch.results) === JSON.stringify(["2"]) &&
+        afterUndoScratch.strokes === strokesBefore &&
+        JSON.stringify(afterUndoScratch.results) === JSON.stringify(["7", "2"]),
+    };
+    ink.clear();
 
     const rows: BaselineRow[] = [];
     for (const [i, line] of TEST_LINES.entries()) {

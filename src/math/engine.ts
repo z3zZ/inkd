@@ -21,7 +21,8 @@ math.import(
 );
 
 export type Solution =
-  | { kind: "result"; expression: string; value: string }
+  /** `value` is the decimal shown by default; `number` is the same result, for other formats. */
+  | { kind: "result"; expression: string; value: string; number: number }
   /** `x = 5`. `value` is null when the right-hand side could not be worked out. */
   | { kind: "assignment"; name: string; value: string | null; reason?: string }
   /** `f(x) = x^2 + 1`. */
@@ -69,10 +70,11 @@ function solveLine(latex: string, scope: Scope): Solution {
 
   if (rhs === "") {
     try {
-      const value = formatValue(evaluate(lhs, scope));
+      const raw = evaluate(lhs, scope);
+      const value = formatValue(raw);
       return value === null
         ? { kind: "none", reason: "result is not a number" }
-        : { kind: "result", expression: lhs, value };
+        : { kind: "result", expression: lhs, value, number: raw as number };
     } catch (error) {
       return { kind: "none", reason: errorReason(error, "could not evaluate") };
     }

@@ -1,3 +1,4 @@
+import { scratchedOut } from "./gestures";
 import {
   DEFAULT_PEN_SIZE,
   type InkPoint,
@@ -10,6 +11,11 @@ import {
 } from "./strokes";
 
 export type Tool = "pen" | "eraser";
+export type PageBackground = "plain" | "grid" | "lined" | "dots";
+
+/** Spacing of the page background, in page pixels. Lined suits a line of handwriting. */
+const GRID = 32;
+const RULE = 64;
 
 export interface StrokeChange {
   added: Stroke[];
@@ -33,7 +39,6 @@ const ERASER_BUTTONS_BIT = 32;
 /** Right mouse button, and the barrel button on most pens. */
 const SECONDARY_BUTTON = 2;
 const SECONDARY_BUTTONS_BIT = 2;
-const INK = "#1d2433";
 
 export class InkCanvas {
   private readonly base: HTMLCanvasElement;
@@ -46,6 +51,9 @@ export class InkCanvas {
   private redoStack: StrokeChange[] = [];
 
   private tool: Tool = "pen";
+  private background: PageBackground = "plain";
+  private inkColor = "#1d2433";
+  private guideColor = "#e3e0d6";
   private scrollY = 0;
   private dpr = 1;
 
@@ -82,6 +90,20 @@ export class InkCanvas {
 
   get scroll(): number {
     return this.scrollY;
+  }
+
+  setBackground(background: PageBackground): void {
+    this.background = background;
+    this.redraw();
+  }
+
+  /** Picks up the theme's colours. Call after the theme changes. */
+  refreshTheme(): void {
+    const style = getComputedStyle(this.host);
+    this.inkColor = style.getPropertyValue("--ink").trim() || this.inkColor;
+    this.guideColor = style.getPropertyValue("--guide").trim() || this.guideColor;
+    this.redraw();
+    this.requestLive();
   }
 
   setTool(tool: Tool): void {
@@ -123,6 +145,15 @@ export class InkCanvas {
     this.events.onScroll?.(0);
     this.strokes = [];
     this.apply({ added: strokes, removed });
+  }
+
+  /**
+   * A finished pen stroke: added as ink, unless it is a scribble over ink, in which case it
+   * erases what it covers and leaves no mark of its own. Public so the self-test can write.
+   */
+  finishStroke(stroke: Stroke): void {
+    const scratched = scratchedOut(stroke, this.strokes);
+    this.commit(scratched.length ? { added: [], removed: scratched } : { added: [stroke], removed: [] });
   }
 
   /** Adds finished strokes as one undoable step. Used by non-pointer input such as the self-test. */
@@ -168,7 +199,7 @@ export class InkCanvas {
 
   private prepare(ctx: CanvasRenderingContext2D): void {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, -this.scrollY * this.dpr);
-    ctx.fillStyle = INK;
+    ctx.fillStyle = this.inkColor;
   }
 
   private redraw(): void {
@@ -176,7 +207,47 @@ export class InkCanvas {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.base.width, this.base.height);
     this.prepare(ctx);
+    this.drawBackground(ctx);
+    ctx.fillStyle = this.inkColor;
     for (const stroke of this.strokes) ctx.fill(strokePath(stroke));
+  }
+
+  /** Grid, rules or dots in page coordinates, so they scroll with the ink. Never part of what is recognised. */
+  private drawBackground(ctx: CanvasRenderingContext2D): void {
+    if (this.background === "plain") return;
+    const width = this.host.clientWidth;
+    const top = this.scrollY;
+    const bottom = top + this.host.clientHeight;
+    ctx.save();
+    ctx.fillStyle = this.guideColor;
+    ctx.strokeStyle = this.guideColor;
+    ctx.lineWidth = 1;
+    const spacing = this.background === "lined" ? RULE : GRID;
+    const first = Math.floor(top / spacing) * spacing;
+    if (this.background === "dots") {
+      for (let y = first; y <= bottom; y += spacing) {
+        for (let x = spacing; x < width; x += spacing) {
+          ctx.beginPath();
+          ctx.arc(x, y, 1.4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    } else {
+      ctx.beginPath();
+      // Half-pixel offsets keep 1px lines crisp.
+      for (let y = first; y <= bottom; y += spacing) {
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(width, y + 0.5);
+      }
+      if (this.background === "grid") {
+        for (let x = spacing; x < width; x += spacing) {
+          ctx.moveTo(x + 0.5, top);
+          ctx.lineTo(x + 0.5, bottom);
+        }
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   private drawLive = (): void => {
@@ -269,7 +340,7 @@ export class InkCanvas {
       const stroke = this.drawing;
       this.drawing = null;
       stroke.endedAt = e.timeStamp;
-      if (e.type === "pointerup") this.commit({ added: [stroke], removed: [] });
+      if (e.type === "pointerup") this.finishStroke(stroke);
       this.requestLive();
     }
     this.events.onPenUp?.();

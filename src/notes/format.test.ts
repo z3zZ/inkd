@@ -70,7 +70,7 @@ describe("LaTeX export", () => {
     expect(
       noteLatex([
         { latex: "x=5", result: null },
-        { latex: "2x=", result: { value: "10", ...at } },
+        { latex: "2x=", result: { value: "10", text: "10", ...at } },
         { latex: "f(x)=x^2+1", result: null },
       ]),
     ).toBe("x=5\n2x= 10\nf(x)=x^2+1");
@@ -79,7 +79,7 @@ describe("LaTeX export", () => {
   it("drops the model's display delimiters so answers still go after the equals sign", () => {
     expect(
       noteLatex([
-        { latex: "\\[f \\left( 2 \\right)=\\]", result: { value: "5", left: 0, top: 0 } },
+        { latex: "\\[f \\left( 2 \\right)=\\]", result: { value: "5", text: "5", left: 0, top: 0 } },
         { latex: "\\[3+4=\\]", result: null },
       ]),
     ).toBe("f \\left( 2 \\right)= 5\n3+4=");

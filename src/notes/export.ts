@@ -17,9 +17,10 @@ const SCALE = 2;
 /** Matches the page: `.result` is 26px and KaTeX draws its maths at 1.21em. */
 const RESULT_FONT = 26 * 1.21;
 
-function readVar(name: string, fallback: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-}
+/** Exports are always light: they get pasted into documents, whatever the app's theme. */
+const PAPER = "#ffffff";
+const INK = "#1d2433";
+const RESULT = "#3f7fb5";
 
 /** The whole note as a PNG: ink plus the answers, on paper, cropped to what is written. */
 export async function renderNotePng(strokes: readonly Stroke[], lines: readonly ExportLine[]): Promise<Blob> {
@@ -33,7 +34,7 @@ export async function renderNotePng(strokes: readonly Stroke[], lines: readonly 
   const boxes: BBox[] = strokes.map(strokeBBox);
   for (const { result } of lines) {
     if (!result) continue;
-    const width = ctx.measureText(result.value).width;
+    const width = ctx.measureText(result.text).width;
     boxes.push({
       left: result.left,
       right: result.left + width,
@@ -45,19 +46,19 @@ export async function renderNotePng(strokes: readonly Stroke[], lines: readonly 
 
   canvas.width = Math.ceil((box.right - box.left + 2 * PADDING) * SCALE);
   canvas.height = Math.ceil((box.bottom - box.top + 2 * PADDING) * SCALE);
-  ctx.fillStyle = readVar("--paper", "#fbfaf6");
+  ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.setTransform(SCALE, 0, 0, SCALE, (PADDING - box.left) * SCALE, (PADDING - box.top) * SCALE);
 
-  ctx.fillStyle = readVar("--ink", "#1d2433");
+  ctx.fillStyle = INK;
   for (const stroke of strokes) ctx.fill(strokePath(stroke));
 
-  // Results are plain numbers, so text drawing matches what KaTeX shows on the page.
+  // Results are drawn as plain text (5/4 rather than a stacked fraction), close to what the page shows.
   ctx.font = font;
   ctx.textBaseline = "middle";
-  ctx.fillStyle = readVar("--result", "#3f7fb5");
+  ctx.fillStyle = RESULT;
   for (const { result } of lines) {
-    if (result) ctx.fillText(result.value, result.left, result.top);
+    if (result) ctx.fillText(result.text, result.left, result.top);
   }
 
   return new Promise((resolve, reject) => {

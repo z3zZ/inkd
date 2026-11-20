@@ -15,6 +15,7 @@ import { createNoteStore } from "./notes/store";
 import { createRecognizer } from "./recognition/TauriOnnxRecognizer";
 import { bindEngineControls } from "./settings/engine";
 import { ModelSetup } from "./settings/ModelSetup";
+import { applyTheme, loadView, ViewMenu, type ViewSettings } from "./settings/view";
 
 const IDLE_MS = 600;
 
@@ -183,6 +184,17 @@ async function copyImage(): Promise<void> {
 
 copyLatexButton.addEventListener("click", () => void copyLatex());
 copyImageButton.addEventListener("click", () => void copyImage());
+
+function applyView(view: ViewSettings): void {
+  applyTheme(view.theme);
+  ink.setBackground(view.background);
+  ink.refreshTheme();
+  controller.setAnswerFormat(view.answers);
+}
+new ViewMenu(document.getElementById("view-toggle") as HTMLButtonElement, applyView);
+applyView(loadView());
+// "System" theme follows Windows when it switches between light and dark.
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => ink.refreshTheme());
 
 const baseline = new BaselinePanel(document.getElementById("baseline")!, ink, recognizer);
 

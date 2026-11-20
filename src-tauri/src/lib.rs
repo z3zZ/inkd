@@ -400,7 +400,20 @@ fn correction_log(app: AppHandle, request: Request<'_>) -> Result<(), String> {
 
 pub fn run() {
     let engine = Engine::default();
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // One copy at a time: two would both save the same notes and overwrite each other.
+    // Opening inkd again brings the running window forward. Left out of dev builds and
+    // self-tests, so they still run while an installed copy is open.
+    if !cfg!(debug_assertions) && std::env::var_os(SELFTEST_ENV).is_none() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }));
+    }
+    builder
         .manage(engine.clone())
         .setup(move |app| {
             let mut dirs = Vec::new();

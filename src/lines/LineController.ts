@@ -3,6 +3,7 @@ import type { StrokeChange } from "../canvas/InkCanvas";
 import type { BBox } from "../canvas/strokes";
 import { type Solution, solveNote } from "../math/engine";
 import { lineKey, type SavedLine } from "../notes/format";
+import { type AnswerFormat, formatAnswer } from "../math/answerFormat";
 import type { Recognition, Recognizer } from "../recognition/Recognizer";
 import { type Line, LineSegmenter } from "./LineSegmenter";
 import { rasterizeStrokes } from "./rasterize";
@@ -21,7 +22,8 @@ export interface ExportLine {
   latex: string;
   bbox: BBox;
   /** The result as shown on the page, in page coordinates; its top is the vertical centre. */
-  result: { value: string; left: number; top: number } | null;
+  /** `value` is LaTeX; `text` is the same answer as plain text. */
+  result: { value: string; text: string; left: number; top: number } | null;
 }
 
 export interface LineControllerEvents {
@@ -39,7 +41,7 @@ interface LineState {
   latex: string | null;
   /** When the reading was corrected by hand: what the model had read. Editing the ink clears it. */
   original: string | null;
-  shown: { value: string; left: number; top: number } | null;
+  shown: { value: string; text: string; left: number; top: number } | null;
   resultEl: HTMLElement | null;
 }
 
@@ -67,6 +69,7 @@ export class LineController {
   private readonly overlay: HTMLElement;
   private penDown = false;
   private primed: Map<string, SavedLine> | null = null;
+  private answerFormat: AnswerFormat = "decimal";
 
   constructor(
     host: HTMLElement,
@@ -109,6 +112,13 @@ export class LineController {
       if (!this.penDown) this.arm(line);
     }
     if (gone.length || dirty.length) this.resolve();
+  }
+
+  /** Decimal, fraction or mixed number, for every result on the page. */
+  setAnswerFormat(format: AnswerFormat): void {
+    if (format === this.answerFormat) return;
+    this.answerFormat = format;
+    this.resolve();
   }
 
   /** Every line read so far, top to bottom, for saving with the note. */
@@ -285,7 +295,9 @@ export class LineController {
     for (const line of this.segmenter.all) {
       const state = this.stateOf(line.id);
       const solution = byLine.get(line.id);
-      const value = solution?.kind === "result" ? solution.value : null;
+      const answer =
+        solution?.kind === "result" ? formatAnswer(solution.number, solution.value, this.answerFormat) : null;
+      const value = answer?.latex ?? null;
       const left = line.bbox.right + RESULT_GAP;
       const top = (line.bbox.top + line.bbox.bottom) / 2;
       const same = state.shown && value !== null && state.shown.value === value && state.shown.left === left && state.shown.top === top;
@@ -296,7 +308,7 @@ export class LineController {
       state.shown = null;
       if (value !== null) {
         state.resultEl = this.renderResult(left, top, value);
-        state.shown = { value, left, top };
+        state.shown = { value, text: answer!.text, left, top };
       }
     }
     return byLine;
