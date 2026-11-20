@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import "katex/dist/katex.min.css";
 import { InkCanvas, type Tool } from "./canvas/InkCanvas";
+import { GraphPanel } from "./graph/GraphPanel";
 import { logCorrection } from "./corrections/CorrectionLog";
 import { CorrectionPopover } from "./corrections/CorrectionPopover";
 import { BaselinePanel } from "./dev/baseline";
@@ -63,6 +64,7 @@ const controller = new LineController(stage, recognizer, IDLE_MS, {
     session.changed();
   },
   onError: (message) => setStatus(message, undefined, true),
+  onCurves: (curves) => graph.setCurves(curves),
 });
 
 const ink = new InkCanvas(stage, {
@@ -135,6 +137,7 @@ function openCorrection(line: Line): void {
 
 const session = new NoteSession(createNoteStore(), ink, controller, {
   onCurrent: (meta) => {
+    graph.reset();
     titleInput.value = meta.title;
     document.title = `${displayTitle(meta)} · inkd`;
     void notesPanel.refresh();
@@ -185,16 +188,42 @@ async function copyImage(): Promise<void> {
 copyLatexButton.addEventListener("click", () => void copyLatex());
 copyImageButton.addEventListener("click", () => void copyImage());
 
+const graphButton = document.getElementById("graph-toggle") as HTMLButtonElement;
+let curveColors = new Map<number, string>();
+const graph = new GraphPanel(document.getElementById("graph")!, {
+  onColors: (colors) => {
+    curveColors = colors;
+    controller.markCurves(graph.isOpen ? colors : new Map());
+  },
+  onClose: () => toggleGraph(false),
+  onStatus: (message, isError) => setStatus(message, undefined, isError),
+});
+
+function toggleGraph(open = !graph.isOpen): void {
+  if (open) graph.open();
+  else graph.close();
+  document.body.classList.toggle("graph-open", open);
+  graphButton.setAttribute("aria-expanded", String(open));
+  graphButton.setAttribute("aria-pressed", String(open));
+  // Colour marks on the page only make sense while the graph is showing.
+  controller.markCurves(open ? curveColors : new Map());
+}
+graphButton.addEventListener("click", () => toggleGraph());
+
 function applyView(view: ViewSettings): void {
   applyTheme(view.theme);
   ink.setBackground(view.background);
   ink.refreshTheme();
+  graph.refreshTheme();
   controller.setAnswerFormat(view.answers);
 }
 new ViewMenu(document.getElementById("view-toggle") as HTMLButtonElement, applyView);
 applyView(loadView());
 // "System" theme follows Windows when it switches between light and dark.
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => ink.refreshTheme());
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  ink.refreshTheme();
+  graph.refreshTheme();
+});
 
 const baseline = new BaselinePanel(document.getElementById("baseline")!, ink, recognizer);
 
@@ -208,6 +237,9 @@ window.addEventListener("keydown", (e) => {
   } else if (mod && key === "n") {
     e.preventDefault();
     void session.create();
+  } else if (mod && key === "g") {
+    e.preventDefault();
+    toggleGraph();
   } else if (mod && key === "o") {
     e.preventDefault();
     notesPanel.toggle();

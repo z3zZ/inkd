@@ -22,6 +22,7 @@
       <button id="copy-latex" class="tool" title="Copy the note as LaTeX (Ctrl+Shift+C)">Copy LaTeX</button>
       <button id="copy-image" class="tool" title="Copy the note as an image">Copy image</button>
       <span class="sep"></span>
+      <button id="graph-toggle" class="tool" aria-expanded="false" aria-controls="graph" title="Graph the curves on this page (Ctrl+G)">Graph</button>
       <button id="view-toggle" class="tool" aria-expanded="false" title="Theme, page and answer format">View</button>
       <span class="spacer"></span>
       <span id="engine" class="engine" hidden>
@@ -33,6 +34,7 @@
     </header>
     <main id="stage" class="stage"></main>
     <aside id="notes" class="notes" aria-label="Notes" hidden></aside>
+    <aside id="graph" class="graph" aria-label="Graph" hidden></aside>
     <aside id="baseline" class="baseline" hidden></aside>
     <footer id="status" class="status" role="status" aria-live="polite"></footer>
     <script type="module" src="/src/main.ts"></script>

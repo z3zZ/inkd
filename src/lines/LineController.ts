@@ -1,7 +1,7 @@
 import katex from "katex";
 import type { StrokeChange } from "../canvas/InkCanvas";
 import type { BBox } from "../canvas/strokes";
-import { type Solution, solveNote } from "../math/engine";
+import { type Plot, type Solution, solveNote } from "../math/engine";
 import { lineKey, type SavedLine } from "../notes/format";
 import { type AnswerFormat, formatAnswer } from "../math/answerFormat";
 import type { Recognition, Recognizer } from "../recognition/Recognizer";
@@ -26,10 +26,19 @@ export interface ExportLine {
   result: { value: string; text: string; left: number; top: number } | null;
 }
 
+export interface LineCurve {
+  lineId: number;
+  name: string;
+  latex: string;
+  at: Plot;
+}
+
 export interface LineControllerEvents {
   onRecognising?: () => void;
   onOutcome?: (outcome: LineOutcome) => void;
   onError?: (message: string) => void;
+  /** Lines that can be graphed, top to bottom, sent each time the page is solved again. */
+  onCurves?: (curves: LineCurve[]) => void;
 }
 
 interface LineState {
@@ -43,6 +52,8 @@ interface LineState {
   original: string | null;
   shown: { value: string; text: string; left: number; top: number } | null;
   resultEl: HTMLElement | null;
+  /** Colour mark beside a graphed line, matching its curve. */
+  markEl: HTMLElement | null;
 }
 
 function noteFor(solution: Solution): string | null {
@@ -52,7 +63,9 @@ function noteFor(solution: Solution): string | null {
     case "assignment":
       return solution.value === null ? `${solution.name} not set: ${solution.reason}` : `${solution.name} = ${solution.value}`;
     case "function":
-      return `${solution.name} defined`;
+      return `${solution.name} defined · open Graph (Ctrl+G) to plot it`;
+    case "graph":
+      return `${solution.name} plotted against x · open Graph (Ctrl+G) to see it`;
     case "result":
       return null;
   }
@@ -70,6 +83,7 @@ export class LineController {
   private penDown = false;
   private primed: Map<string, SavedLine> | null = null;
   private answerFormat: AnswerFormat = "decimal";
+  private curveColors = new Map<number, string>();
 
   constructor(
     host: HTMLElement,
@@ -112,6 +126,34 @@ export class LineController {
       if (!this.penDown) this.arm(line);
     }
     if (gone.length || dirty.length) this.resolve();
+  }
+
+  /** Marks graphed lines with their curve's colour. An empty map removes the marks. */
+  markCurves(colors: Map<number, string>): void {
+    this.curveColors = colors;
+    this.renderMarks();
+  }
+
+  private renderMarks(): void {
+    for (const line of this.segmenter.all) {
+      const state = this.states.get(line.id);
+      if (!state) continue;
+      const color = this.curveColors.get(line.id);
+      if (!color) {
+        state.markEl?.remove();
+        state.markEl = null;
+        continue;
+      }
+      if (!state.markEl) {
+        state.markEl = document.createElement("div");
+        state.markEl.className = "curve-mark";
+        state.markEl.title = "This line is drawn in the graph in this colour";
+        this.overlay.append(state.markEl);
+      }
+      state.markEl.style.background = color;
+      state.markEl.style.left = `${line.bbox.right + RESULT_GAP}px`;
+      state.markEl.style.top = `${(line.bbox.top + line.bbox.bottom) / 2}px`;
+    }
   }
 
   /** Decimal, fraction or mixed number, for every result on the page. */
@@ -239,7 +281,7 @@ export class LineController {
   private stateOf(id: number): LineState {
     let state = this.states.get(id);
     if (!state) {
-      state = { revision: 0, timer: undefined, dirty: false, latex: null, original: null, shown: null, resultEl: null };
+      state = { revision: 0, timer: undefined, dirty: false, latex: null, original: null, shown: null, resultEl: null, markEl: null };
       this.states.set(id, state);
     }
     return state;
@@ -250,6 +292,7 @@ export class LineController {
     if (!state) return;
     clearTimeout(state.timer);
     state.resultEl?.remove();
+    state.markEl?.remove();
     this.states.delete(id);
   }
 
@@ -311,6 +354,15 @@ export class LineController {
         state.shown = { value, text: answer!.text, left, top };
       }
     }
+    const curves: LineCurve[] = [];
+    for (const line of lines) {
+      const solution = byLine.get(line.id)!;
+      if (solution.kind === "graph" || solution.kind === "function") {
+        curves.push({ lineId: line.id, name: solution.name, latex: this.states.get(line.id)!.latex!, at: solution.at });
+      }
+    }
+    this.events.onCurves?.(curves);
+    this.renderMarks();
     return byLine;
   }
 

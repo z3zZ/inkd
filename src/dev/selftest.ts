@@ -234,6 +234,44 @@ export async function runSelfTest(
     };
     ink.clear();
 
+    // Graphing: curves written on the page are drawn, each in its own colour, with marks on the page.
+    setStatus("Self-test: graph");
+    ink.clear();
+    const curveLines = [
+      synthesizeLine(["y", "=", "x", { sup: ["2"] }, "-", "3"], 60, 80, 5001),
+      synthesizeLine(["f", "(", "x", ")", "=", "x", { sup: ["2"] }, "+", "1"], 60, 200, 5002),
+      synthesizeLine(["y", "=", "2", "x", "+", "1"], 60, 320, 5003),
+    ];
+    for (const strokes of curveLines) ink.addStrokes(strokes);
+    const legendItems = async (count: number) => {
+      const deadline = performance.now() + 60_000;
+      let items: string[] = [];
+      while (performance.now() < deadline) {
+        items = [...document.querySelectorAll(".graph-legend-item annotation")].map((a) => a.textContent ?? "");
+        if (items.length >= count) break;
+        await wait(100);
+      }
+      return items;
+    };
+    (document.getElementById("graph-toggle") as HTMLButtonElement).click();
+    const legend = await legendItems(3);
+    await wait(300);
+    const marks = [...document.querySelectorAll<HTMLElement>(".curve-mark")].map((m) => m.style.background);
+    const graphCanvas = document.querySelector<HTMLCanvasElement>(".graph-plot canvas")!;
+    const graphPng = await new Promise<Blob>((resolve, reject) =>
+      graphCanvas.toBlob((b) => (b ? resolve(b) : reject(new Error("graph capture failed"))), "image/png"),
+    );
+    await writeDevFile("graph.png", new Uint8Array(await graphPng.arrayBuffer()));
+    (document.getElementById("graph-toggle") as HTMLButtonElement).click();
+    const marksAfterClose = document.querySelectorAll(".curve-mark").length;
+    report.graph = {
+      legend,
+      marks,
+      marksAfterClose,
+      pass: legend.length === 3 && new Set(marks).size === 3 && marksAfterClose === 0,
+    };
+    ink.clear();
+
     const rows: BaselineRow[] = [];
     for (const [i, line] of TEST_LINES.entries()) {
       setStatus(`Self-test: proxy line ${i + 1}/${TEST_LINES.length}`);

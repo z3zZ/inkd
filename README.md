@@ -15,6 +15,7 @@ Working towards an MVP. Done so far:
 - Correcting misread lines. Each correction is kept as training data.
 - A Windows installer, with the model downloaded on first run. Only one copy runs at a time.
 - Scratch-to-erase, answers as fractions or mixed numbers, dark mode, and grid, lined or dot paper.
+- Graphing: every curve on the page in one graph, each in its own colour and marked beside its line.
 
 ## Install
 
@@ -49,6 +50,7 @@ Write with the pen, for example `3/4 + 1/2 =`, then lift it for 600 ms. The stat
 | Pen tip | Ink |
 | Pen eraser end, or Eraser tool (`E`) | Erase whole strokes |
 | Scribble back and forth over ink | Scratch it out (undoable) |
+| Ctrl+G, or Graph | Graph every `y = …` (in x) and `f(x) = …` on the page: drag to pan, scroll to zoom, double-click to fit, hover to read values |
 | View | Theme (system, light, dark), page (plain, grid, lined, dots), answers (decimal, fraction, mixed) |
 | Ctrl+Z, Ctrl+Y | Undo, redo |
 | Right-click, or the pen's barrel button, on a line | Correct what it was read as |

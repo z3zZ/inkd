@@ -59,4 +59,37 @@ describe("solveNote", () => {
     solveNote(["x=5"]);
     expect(solveNote(["x="])[0].kind).toBe("none");
   });
+
+  it("treats y = (expression in x) as a curve to graph", () => {
+    const [curve] = solveNote(["y=x^{2}+1"]);
+    expect(curve.kind).toBe("graph");
+    if (curve.kind !== "graph") return;
+    expect(curve.name).toBe("y");
+    expect(curve.at(3)).toBe(10);
+    expect(curve.at(-2)).toBe(5);
+  });
+
+  it("graphs with the values defined above", () => {
+    const [, curve] = solveNote(["a=2", "y=ax+1"]);
+    expect(curve.kind === "graph" && curve.at(4)).toBe(9);
+  });
+
+  it("gives NaN where a curve is undefined", () => {
+    const [curve] = solveNote([String.raw`y=\frac{1}{x}`]);
+    expect(curve.kind).toBe("graph");
+    if (curve.kind === "graph") {
+      expect(curve.at(2)).toBe(0.5);
+      expect(Number.isFinite(curve.at(0))).toBe(false);
+    }
+  });
+
+  it("keeps y = number and y = (x defined above) as values", () => {
+    expect(solveNote(["y=5"])[0]).toMatchObject({ kind: "assignment", value: "5" });
+    expect(solveNote(["x=5", "y=2x+1"])[1]).toMatchObject({ kind: "assignment", value: "11" });
+  });
+
+  it("can graph a function defined on the page", () => {
+    const [fn] = solveNote(["f(x)=x^{2}+1"]);
+    expect(fn.kind === "function" && fn.at(2)).toBe(5);
+  });
 });

@@ -15,6 +15,15 @@
   --guide: #e3e0d6;
   --shadow: rgb(0 0 0 / .1);
   --backdrop: rgb(29 36 51 / .28);
+  /* Curve colours: a validated categorical palette, in fixed order. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
   color-scheme: light;
 }
 
@@ -37,6 +46,14 @@
     --guide: #2c323e;
     --shadow: rgb(0 0 0 / .45);
     --backdrop: rgb(0 0 0 / .5);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #0ca30c;
+    --series-7: #9085e9;
+    --series-8: #e66767;
     color-scheme: dark;
   }
 }
@@ -57,6 +74,14 @@
   --guide: #2c323e;
   --shadow: rgb(0 0 0 / .45);
   --backdrop: rgb(0 0 0 / .5);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #0ca30c;
+  --series-7: #9085e9;
+  --series-8: #e66767;
   color-scheme: dark;
 }
 
@@ -341,3 +366,87 @@ body { display: grid; grid-template-rows: 40px 1fr 26px; }
 .segmented button:hover { color: var(--ink); }
 .segmented button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .segmented button[aria-checked="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px var(--shadow); }
+
+/* Graph: docked on the right; the page narrows to make room. */
+body.graph-open .stage { margin-right: 440px; }
+.graph {
+  position: fixed;
+  top: 40px;
+  right: 0;
+  bottom: 26px;
+  width: 440px;
+  display: flex;
+  flex-direction: column;
+  background: var(--chrome);
+  border-left: 1px solid var(--chrome-line);
+  z-index: 2;
+}
+.graph[hidden] { display: none; }
+.graph-header { display: flex; align-items: center; gap: 4px; padding: 8px 8px 6px 12px; }
+.graph-header h2 { margin: 0; font-size: 13px; color: var(--chrome-text); }
+.graph-plot { position: relative; height: 340px; margin: 0 8px; overflow: hidden; border: 1px solid var(--chrome-line); border-radius: 8px; }
+.graph-plot canvas { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+.graph-plot canvas.dragging { cursor: grabbing; }
+.graph-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  padding: 24px;
+  background: var(--paper);
+  color: var(--chrome-text);
+  text-align: center;
+  line-height: 1.8;
+  pointer-events: none;
+}
+.graph-empty[hidden] { display: none; }
+.graph-tooltip {
+  position: absolute;
+  min-width: 110px;
+  padding: 6px 8px;
+  background: var(--surface);
+  border: 1px solid var(--chrome-line);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px var(--shadow);
+  color: var(--ink);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.graph-tooltip[hidden] { display: none; }
+.graph-tip-x { margin-bottom: 3px; color: var(--chrome-text); }
+.graph-tip-row { display: flex; align-items: center; gap: 6px; }
+.graph-tip-name { flex: 1; font-style: italic; }
+.graph-swatch { display: inline-block; width: 12px; height: 4px; border-radius: 2px; flex: none; }
+.graph-hint { margin: 6px 12px; color: var(--chrome-text); font-size: 11px; }
+.graph-legend { flex: 1; margin: 0; padding: 0 8px 12px; overflow-y: auto; list-style: none; }
+.graph-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+.graph-legend-item:hover { background: var(--hover); }
+.graph-legend-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.graph-legend-item[aria-pressed="false"] { opacity: .45; }
+.graph-legend-item[aria-pressed="false"] .graph-formula { text-decoration: line-through; }
+.graph-formula { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.graph-name { color: var(--chrome-text); font-family: "Cambria Math", "Times New Roman", serif; font-style: italic; }
+.graph-note { padding: 6px 8px; color: var(--chrome-text); font-size: 12px; }
+
+.curve-mark {
+  position: absolute;
+  width: 18px;
+  height: 5px;
+  border-radius: 3px;
+  transform: translateY(-50%);
+}

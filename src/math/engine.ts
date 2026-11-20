@@ -4,6 +4,8 @@ import { LatexError, latexToMath } from "./latexToMath";
 const math = create(all);
 // Expressions come from a recognition model, so they get arithmetic and nothing else.
 const evaluate = math.evaluate.bind(math);
+// Taken before parse is blocked below, like evaluate: graphs compile a line once and run it per pixel.
+const compile = math.compile.bind(math);
 const blocked = () => {
   throw new Error("function disabled");
 };
@@ -25,9 +27,14 @@ export type Solution =
   | { kind: "result"; expression: string; value: string; number: number }
   /** `x = 5`. `value` is null when the right-hand side could not be worked out. */
   | { kind: "assignment"; name: string; value: string | null; reason?: string }
-  /** `f(x) = x^2 + 1`. */
-  | { kind: "function"; name: string }
+  /** `f(x) = x^2 + 1`. `at` evaluates it, for graphing. */
+  | { kind: "function"; name: string; at: Plot }
+  /** `y = x^2 + 1` with x not defined above: a curve to graph rather than a value. */
+  | { kind: "graph"; name: string; at: Plot }
   | { kind: "none"; reason: string };
+
+/** One point of a curve: NaN where it is undefined, as at x = 0 for 1/x. */
+export type Plot = (x: number) => number;
 
 /** Values and functions defined so far, read by the lines below. */
 type Scope = Map<string, unknown>;
@@ -81,6 +88,12 @@ function solveLine(latex: string, scope: Scope): Solution {
   }
 
   if (VARIABLE.test(lhs)) {
+    const curve = lhs !== PLOT_VARIABLE && !scope.has(PLOT_VARIABLE) ? asCurve(rhs, scope) : null;
+    if (curve) {
+      // y is a curve now, not a number: lines below must not use an older value of it.
+      scope.delete(lhs);
+      return { kind: "graph", name: lhs, at: curve };
+    }
     try {
       const raw = evaluate(rhs, scope);
       const value = formatValue(raw);
@@ -101,7 +114,8 @@ function solveLine(latex: string, scope: Scope): Solution {
   if (head) {
     try {
       evaluate(`${lhs}=${rhs}`, scope);
-      return { kind: "function", name: head[1] };
+      const fn = scope.get(head[1]) as (t: number) => unknown;
+      return { kind: "function", name: head[1], at: (t) => toNumber(() => fn(t)) };
     } catch (error) {
       scope.delete(head[1]);
       return { kind: "none", reason: errorReason(error, "could not define function") };
@@ -109,6 +123,41 @@ function solveLine(latex: string, scope: Scope): Solution {
   }
 
   return { kind: "none", reason: "not a calculation" };
+}
+
+/** The variable curves are drawn against. */
+const PLOT_VARIABLE = "x";
+
+function toNumber(run: () => unknown): number {
+  try {
+    const value = run();
+    return typeof value === "number" ? value : NaN;
+  } catch {
+    return NaN;
+  }
+}
+
+/**
+ * The right-hand side as a function of x, if it uses x and gives numbers for it.
+ * Uses the values defined above, as they are on this line.
+ */
+function asCurve(rhs: string, scope: Scope): Plot | null {
+  let code: { evaluate: (scope: Map<string, unknown>) => unknown };
+  try {
+    code = compile(rhs);
+  } catch {
+    return null;
+  }
+  const local = new Map(scope);
+  const at: Plot = (x) => {
+    local.set(PLOT_VARIABLE, x);
+    return toNumber(() => code.evaluate(local));
+  };
+  // It must depend on x: changing x changes the value somewhere on a few probe points.
+  const probes = [-1.7, 0.3, 1.3, 2.9].map(at);
+  if (probes.every((v) => !Number.isFinite(v))) return null;
+  const finite = probes.filter(Number.isFinite);
+  return finite.some((v) => Math.abs(v - finite[0]) > 1e-12) ? at : null;
 }
 
 /** Solves a note's lines top to bottom, so each line sees what the lines above define. */
