@@ -47,6 +47,12 @@ jobs:
         shell: bash
         run: bash scripts/fetch-redist.sh
 
+      # ort-sys copies DirectML.dll into these folders during the build and
+      # crashes if they don't exist yet, which they don't on a fresh runner.
+      - name: Prepare build folders
+        shell: bash
+        run: mkdir -p src-tauri/target/release/{examples,deps} src-tauri/target/release/build/{examples,deps}
+
       - name: Build installer
         run: npm run tauri build
 
