@@ -16,6 +16,8 @@ export interface SavedLine {
   latex: string;
   /** Present when the reading was corrected by hand: what the model read. */
   original?: string;
+  /** How sure the model was of the reading, 0..1. Absent for hand corrections and older notes. */
+  confidence?: number;
 }
 
 export interface NoteMeta {
@@ -117,9 +119,12 @@ export function parseNote(json: string): OpenNote {
     .filter(
       (l): l is SavedLine => Array.isArray(l?.strokes) && l.strokes.every(isNumber) && typeof l.latex === "string",
     )
-    .map(({ strokes, latex, original }) =>
-      typeof original === "string" ? { strokes, latex, original } : { strokes, latex },
-    );
+    .map(({ strokes, latex, original, confidence }) => {
+      const line: SavedLine = { strokes, latex };
+      if (typeof original === "string") line.original = original;
+      if (isNumber(confidence) && confidence >= 0 && confidence <= 1) line.confidence = confidence;
+      return line;
+    });
   const preview = Array.isArray(note.preview) ? note.preview.filter((p) => typeof p === "string") : [];
 
   return {

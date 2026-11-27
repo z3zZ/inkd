@@ -6,10 +6,44 @@ import { lineKey, type SavedLine } from "../notes/format";
 import { type AnswerFormat, formatAnswer } from "../math/answerFormat";
 import type { AngleUnit } from "../math/latexToMath";
 import type { Recognition, Recognizer } from "../recognition/Recognizer";
+import { stripMathDelimiters } from "../math/latexToMath";
 import { type Line, LineSegmenter } from "./LineSegmenter";
 import { rasterizeStrokes } from "./rasterize";
 
 const RESULT_GAP = 14;
+const FLAG_GAP = 8;
+/** Below this, a reading is shown as unsure. Misreads in the handwriting baseline scored under it. */
+export const UNSURE_BELOW = 0.8;
+/** Lines that are not sums are ordinary notes, not problems worth flagging. */
+const QUIET_REASONS = new Set(["no equals sign", "not a calculation"]);
+
+/** Why a line is marked on the page, if it is. */
+export interface LineFlag {
+  /** error: could not be read. unsolved: read, but no answer. unsure: answered from a doubtful reading. */
+  kind: "error" | "unsolved" | "unsure";
+  title: string;
+}
+
+/** Decides whether a line needs a mark beside it, and what the mark says. */
+export function flagFor(
+  line: { error: string | null; latex: string | null; confidence: number | null },
+  solution: Solution | undefined,
+): LineFlag | null {
+  if (line.error !== null) return { kind: "error", title: `This line could not be read: ${line.error} Click to try again.` };
+  if (line.latex === null || !solution) return null;
+  const read = stripMathDelimiters(line.latex);
+  const reason =
+    solution.kind === "none" ? solution.reason : solution.kind === "assignment" && solution.value === null ? solution.reason : undefined;
+  if (reason !== undefined) {
+    if (QUIET_REASONS.has(reason)) return null;
+    return { kind: "unsolved", title: `Read as ${read}, but there is no answer: ${reason}. Click to correct the reading.` };
+  }
+  if (line.confidence !== null && line.confidence < UNSURE_BELOW) {
+    const percent = Math.round(line.confidence * 100);
+    return { kind: "unsure", title: `Read as ${read}, but only ${percent}% sure. Click to check the reading.` };
+  }
+  return null;
+}
 
 export interface LineOutcome {
   line: Line;
@@ -40,6 +74,8 @@ export interface LineControllerEvents {
   onError?: (message: string) => void;
   /** Lines that can be graphed, top to bottom, sent each time the page is solved again. */
   onCurves?: (curves: LineCurve[]) => void;
+  /** The mark beside a line that was read, but doubtfully or without an answer, was clicked. */
+  onFlagClick?: (line: Line) => void;
 }
 
 interface LineState {
@@ -51,8 +87,15 @@ interface LineState {
   latex: string | null;
   /** When the reading was corrected by hand: what the model had read. Editing the ink clears it. */
   original: string | null;
+  /** How sure the model was of `latex`, 0..1. Null for a reading typed in by hand, or not known. */
+  confidence: number | null;
+  /** Why the last attempt to read the line failed. Cleared when it is read or edited. */
+  error: string | null;
   shown: { value: string; text: string; left: number; top: number } | null;
   resultEl: HTMLElement | null;
+  /** The mark beside a line that failed or is doubtful, and what it currently says. */
+  flagEl: HTMLButtonElement | null;
+  flagKey: string | null;
   /** Colour mark beside a graphed line, matching its curve. */
   markEl: HTMLElement | null;
 }
@@ -120,11 +163,15 @@ export class LineController {
         state.dirty = false;
         state.latex = saved.latex;
         state.original = saved.original ?? null;
+        state.confidence = saved.confidence ?? null;
+        state.error = null;
         continue;
       }
       state.dirty = true;
       state.latex = null;
       state.original = null;
+      state.confidence = null;
+      state.error = null;
       if (!this.penDown) this.arm(line);
     }
     if (gone.length || dirty.length) this.resolve();
@@ -175,8 +222,10 @@ export class LineController {
   /** Every line read so far, top to bottom, for saving with the note. */
   readings(): SavedLine[] {
     return this.readLines().map(({ line, latex, state }) => {
-      const strokes = line.strokes.map((s) => s.id);
-      return state.original === null ? { strokes, latex } : { strokes, latex, original: state.original };
+      const saved: SavedLine = { strokes: line.strokes.map((s) => s.id), latex };
+      if (state.original !== null) saved.original = state.original;
+      if (state.confidence !== null) saved.confidence = Math.round(state.confidence * 1000) / 1000;
+      return saved;
     });
   }
 
@@ -218,6 +267,8 @@ export class LineController {
       state.original = null;
     } else {
       state.original = original;
+      // A reading typed in by hand is not in doubt.
+      state.confidence = null;
     }
     state.latex = latex;
     this.resolve();
@@ -242,6 +293,8 @@ export class LineController {
     state.revision++;
     state.latex = null;
     state.original = null;
+    state.confidence = null;
+    state.error = null;
     state.dirty = true;
     this.resolve();
     void this.run(line);
@@ -290,7 +343,20 @@ export class LineController {
   private stateOf(id: number): LineState {
     let state = this.states.get(id);
     if (!state) {
-      state = { revision: 0, timer: undefined, dirty: false, latex: null, original: null, shown: null, resultEl: null, markEl: null };
+      state = {
+        revision: 0,
+        timer: undefined,
+        dirty: false,
+        latex: null,
+        original: null,
+        confidence: null,
+        error: null,
+        shown: null,
+        resultEl: null,
+        markEl: null,
+        flagEl: null,
+        flagKey: null,
+      };
       this.states.set(id, state);
     }
     return state;
@@ -302,6 +368,7 @@ export class LineController {
     clearTimeout(state.timer);
     state.resultEl?.remove();
     state.markEl?.remove();
+    state.flagEl?.remove();
     this.states.delete(id);
   }
 
@@ -316,6 +383,10 @@ export class LineController {
     if (!state) return;
     const revision = state.revision;
     state.dirty = false;
+    if (state.error !== null) {
+      state.error = null;
+      this.resolve();
+    }
     this.events.onRecognising?.();
 
     try {
@@ -324,6 +395,7 @@ export class LineController {
       if (this.states.get(line.id) !== state || state.revision !== revision) return;
 
       state.latex = recognition.latex;
+      state.confidence = recognition.confidence;
       const solution = this.resolve().get(line.id)!;
       this.events.onOutcome?.({
         line,
@@ -332,7 +404,13 @@ export class LineController {
         note: noteFor(solution),
       });
     } catch (error) {
-      this.events.onError?.(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      // The line stays on the page unread: say so beside it, where it can be tried again.
+      if (this.states.get(line.id) === state && state.revision === revision) {
+        state.error = message;
+        this.resolve();
+      }
+      this.events.onError?.(message);
     }
   }
 
@@ -353,15 +431,16 @@ export class LineController {
       const left = line.bbox.right + RESULT_GAP;
       const top = (line.bbox.top + line.bbox.bottom) / 2;
       const same = state.shown && value !== null && state.shown.value === value && state.shown.left === left && state.shown.top === top;
-      if (same) continue;
-
-      state.resultEl?.remove();
-      state.resultEl = null;
-      state.shown = null;
-      if (value !== null) {
-        state.resultEl = this.renderResult(left, top, value);
-        state.shown = { value, text: answer!.text, left, top };
+      if (!same) {
+        state.resultEl?.remove();
+        state.resultEl = null;
+        state.shown = null;
+        if (value !== null) {
+          state.resultEl = this.renderResult(left, top, value);
+          state.shown = { value, text: answer!.text, left, top };
+        }
       }
+      this.renderFlag(line, state, flagFor(state, solution), left, top);
     }
     const curves: LineCurve[] = [];
     for (const line of lines) {
@@ -373,6 +452,33 @@ export class LineController {
     this.events.onCurves?.(curves);
     this.renderMarks();
     return byLine;
+  }
+
+  /** The small "?" beside a line that could not be read, has no answer, or was read doubtfully. */
+  private renderFlag(line: Line, state: LineState, flag: LineFlag | null, left: number, top: number): void {
+    state.resultEl?.classList.toggle("unsure", flag?.kind === "unsure");
+    // After the answer when there is one, otherwise where the answer would be.
+    const x = state.resultEl ? left + state.resultEl.offsetWidth + FLAG_GAP : left;
+    const key = flag ? `${flag.kind}|${flag.title}|${x}|${top}` : null;
+    if (key === state.flagKey) return;
+    state.flagKey = key;
+    state.flagEl?.remove();
+    state.flagEl = null;
+    if (!flag) return;
+
+    const el = document.createElement("button");
+    el.className = `line-flag ${flag.kind}`;
+    el.textContent = "?";
+    el.title = flag.title;
+    el.setAttribute("aria-label", flag.title);
+    el.style.left = `${x}px`;
+    el.style.top = `${top}px`;
+    el.addEventListener("click", () => {
+      if (flag.kind === "error") this.reread(line.id);
+      else this.events.onFlagClick?.(line);
+    });
+    this.overlay.append(el);
+    state.flagEl = el;
   }
 
   private renderResult(left: number, top: number, value: string): HTMLElement {

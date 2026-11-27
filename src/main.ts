@@ -66,6 +66,7 @@ const controller = new LineController(stage, recognizer, IDLE_MS, {
   },
   onError: (message) => setStatus(message, undefined, true),
   onCurves: (curves) => graph.setCurves(curves),
+  onFlagClick: (line) => openCorrection(line),
 });
 
 const ink = new InkCanvas(stage, {

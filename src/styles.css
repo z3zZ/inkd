@@ -143,6 +143,29 @@ body { display: grid; grid-template-rows: 40px 1fr 26px; }
   white-space: nowrap;
 }
 
+/* A reading the model was not sure of: the answer may be to a different sum. */
+.result.unsure { opacity: .7; border-bottom: 2px dotted currentColor; }
+
+/* The "?" beside a line that failed, has no answer, or was read doubtfully. */
+.line-flag {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 1px solid var(--chrome-text);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 12px/1 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.line-flag:hover { border-color: var(--accent); color: var(--accent); }
+.line-flag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.line-flag.unsure { border-style: dashed; border-color: var(--result); color: var(--result); }
+.line-flag.error { border-color: var(--error); background: var(--error-bg); color: var(--error); }
+
 .status {
   display: flex;
   align-items: center;
