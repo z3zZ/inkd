@@ -30,20 +30,34 @@ export class LineSegmenter {
     const dirty = new Set<Line>();
     const gone = new Set<number>();
 
+    const shrunk = new Set<Line>();
     for (const stroke of removed) {
       for (const line of this.lines.values()) {
         const index = line.strokes.indexOf(stroke);
         if (index === -1) continue;
         line.strokes.splice(index, 1);
         if (line.strokes.length) {
-          line.bbox = this.boundsOf(line.strokes);
-          dirty.add(line);
+          shrunk.add(line);
         } else {
           this.lines.delete(line.id);
-          dirty.delete(line);
+          shrunk.delete(line);
           gone.add(line.id);
         }
         break;
+      }
+    }
+    // The stroke taken away may have been all that joined two lines, such as a stray mark
+    // between them: what is left goes back to being separate lines.
+    for (const line of shrunk) {
+      const [first, ...rest] = groupByBand(line.strokes);
+      line.strokes = first;
+      line.bbox = this.boundsOf(first);
+      dirty.add(line);
+      for (const strokes of rest) {
+        const split = this.createLine();
+        split.strokes = strokes;
+        split.bbox = this.boundsOf(strokes);
+        dirty.add(split);
       }
     }
 
@@ -74,6 +88,30 @@ export class LineSegmenter {
   private boundsOf(strokes: Stroke[]): BBox {
     return unionBBox(strokes.map(strokeBBox));
   }
+}
+
+/**
+ * Splits strokes into groups whose vertical bands touch, topmost group first. Groups are
+ * merged until none touch, so the outcome does not depend on the order the strokes were written in.
+ */
+function groupByBand(strokes: Stroke[]): Stroke[][] {
+  let groups = strokes.map((stroke) => ({ strokes: [stroke], bbox: strokeBBox(stroke) }));
+  for (let merged = true; merged; ) {
+    merged = false;
+    const next: typeof groups = [];
+    for (const group of groups) {
+      const into = next.find((other) => bandsTouch(group.bbox, other.bbox));
+      if (into) {
+        into.strokes.push(...group.strokes);
+        into.bbox = unionBBox([into.bbox, group.bbox]);
+        merged = true;
+      } else {
+        next.push(group);
+      }
+    }
+    groups = next;
+  }
+  return groups.sort((a, b) => a.bbox.top - b.bbox.top).map((group) => group.strokes);
 }
 
 function bandsTouch(a: BBox, b: BBox): boolean {
