@@ -2,6 +2,8 @@
 name = "inkd"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+description = "Handwriting maths for pen tablets. Your answers, inked."
 default-run = "inkd"
 
 [lib]

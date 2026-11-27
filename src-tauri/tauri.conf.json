@@ -40,7 +40,7 @@
       "licenses/*": "licenses/"
     },
     "publisher": "Joshan Randhawa",
-    "shortDescription": "Handwriting maths notes that solve as you write",
+    "shortDescription": "Handwriting maths for pen tablets. Your answers, inked.",
     "windows": {
       "nsis": {
         "installMode": "currentUser"
