@@ -6,6 +6,7 @@ import {
   newStrokeId,
   reserveStrokeIds,
   type Stroke,
+  strokeBBox,
   strokeHit,
   strokePath,
 } from "./strokes";
@@ -39,6 +40,12 @@ const ERASER_BUTTONS_BIT = 32;
 /** Right mouse button, and the barrel button on most pens. */
 const SECONDARY_BUTTON = 2;
 const SECONDARY_BUTTONS_BIT = 2;
+/** A finger only scrolls once the pen has been away this long, so a resting palm cannot move the page. */
+const PEN_QUIET_MS = 700;
+/** Shortest scrollbar thumb, so it stays easy to grab with a pen. */
+const MIN_THUMB = 36;
+/** Gap above and below the scrollbar; matches .scrollbar in styles.css. */
+const TRACK_INSET = 4;
 
 export class InkCanvas {
   private readonly base: HTMLCanvasElement;
@@ -62,6 +69,16 @@ export class InkCanvas {
   private erasedThisGesture: Stroke[] | null = null;
   private liveFrame = 0;
 
+  /** A finger dragging the page. */
+  private pan: { pointer: number; lastY: number } | null = null;
+  private lastPenAt = -Infinity;
+  /** Bottom edge of the lowest ink, in page pixels. */
+  private contentBottom = 0;
+  private readonly track: HTMLElement;
+  private readonly thumb: HTMLElement;
+  /** A drag of the scrollbar thumb: where it started, and the page length it was measured against. */
+  private thumbDrag: { pointer: number; startY: number; startScroll: number; perPixel: number } | null = null;
+
   constructor(
     private readonly host: HTMLElement,
     private readonly events: InkCanvasEvents = {},
@@ -72,8 +89,21 @@ export class InkCanvas {
     this.baseCtx = this.base.getContext("2d")!;
     this.liveCtx = this.live.getContext("2d")!;
 
+    this.track = document.createElement("div");
+    this.track.className = "scrollbar";
+    this.thumb = document.createElement("div");
+    this.thumb.className = "scroll-thumb";
+    this.thumb.title = "Drag to scroll the page";
+    this.track.append(this.thumb);
+    host.append(this.track);
+    this.thumb.addEventListener("pointerdown", this.onThumbDown);
+    this.thumb.addEventListener("pointermove", this.onThumbMove);
+    this.thumb.addEventListener("pointerup", this.onThumbEnd);
+    this.thumb.addEventListener("pointercancel", this.onThumbEnd);
+
     new ResizeObserver(() => this.resize()).observe(host);
     this.resize();
+    this.watchPixelRatio();
 
     const el = this.live;
     el.addEventListener("pointerdown", this.onPointerDown);
@@ -90,6 +120,25 @@ export class InkCanvas {
 
   get scroll(): number {
     return this.scrollY;
+  }
+
+  /** Scrolls the page by a distance in page pixels. Used by the wheel, keys, fingers and the scrollbar. */
+  scrollBy(dy: number): void {
+    this.scrollTo(this.scrollY + dy);
+  }
+
+  scrollTo(y: number): void {
+    const next = Math.max(0, y);
+    if (next === this.scrollY) return;
+    this.scrollY = next;
+    this.redraw();
+    this.requestLive();
+    this.events.onScroll?.(this.scrollY);
+  }
+
+  /** Scrolls by a share of the visible page: 1 is one screenful down, -1 one up. */
+  scrollPages(pages: number): void {
+    this.scrollBy(pages * this.host.clientHeight);
   }
 
   setBackground(background: PageBackground): void {
@@ -182,6 +231,7 @@ export class InkCanvas {
   private apply(change: StrokeChange): void {
     const removed = new Set(change.removed);
     this.strokes = this.strokes.filter((s) => !removed.has(s)).concat(change.added);
+    this.contentBottom = this.strokes.reduce((bottom, s) => Math.max(bottom, strokeBBox(s).bottom), 0);
     this.redraw();
     this.events.onChange?.(change);
     this.events.onHistory?.(this.undoStack.length > 0, this.redoStack.length > 0);
@@ -197,6 +247,77 @@ export class InkCanvas {
     this.redraw();
   }
 
+  /**
+   * Windows scaling can change with no change in size, as when the window is dragged to a
+   * monitor with a different scale. Redraw at the new pixel ratio so ink stays sharp.
+   */
+  private watchPixelRatio(): void {
+    const query = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    query.addEventListener(
+      "change",
+      () => {
+        this.resize();
+        this.watchPixelRatio();
+      },
+      { once: true },
+    );
+  }
+
+  /** How long the page is for scrolling: past the lowest ink, and never shorter than what is in view. */
+  private pageLength(): number {
+    const view = this.host.clientHeight;
+    return Math.max(this.contentBottom + view / 2, this.scrollY + view);
+  }
+
+  /** Height of the scrollbar's track. Worked out from the page, since a hidden track has no size. */
+  private trackLength(): number {
+    return this.host.clientHeight - 2 * TRACK_INSET;
+  }
+
+  private updateScrollbar(): void {
+    const view = this.host.clientHeight;
+    const length = this.pageLength();
+    const room = this.trackLength();
+    // Nothing to scroll to: the page fits and is at the top.
+    if (length <= view + 1 || room <= MIN_THUMB) {
+      this.track.hidden = true;
+      return;
+    }
+    this.track.hidden = false;
+    const size = Math.max(MIN_THUMB, (view / length) * room);
+    const travel = Math.max(1, room - size);
+    this.thumb.style.height = `${size}px`;
+    this.thumb.style.transform = `translateY(${(this.scrollY / (length - view)) * travel}px)`;
+  }
+
+  private onThumbDown = (e: PointerEvent): void => {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const view = this.host.clientHeight;
+    const travel = Math.max(1, this.trackLength() - this.thumb.offsetHeight);
+    this.thumb.setPointerCapture(e.pointerId);
+    this.thumbDrag = {
+      pointer: e.pointerId,
+      startY: e.clientY,
+      startScroll: this.scrollY,
+      perPixel: (this.pageLength() - view) / travel,
+    };
+    this.thumb.classList.add("dragging");
+  };
+
+  private onThumbMove = (e: PointerEvent): void => {
+    const drag = this.thumbDrag;
+    if (!drag || e.pointerId !== drag.pointer) return;
+    this.scrollTo(drag.startScroll + (e.clientY - drag.startY) * drag.perPixel);
+  };
+
+  private onThumbEnd = (e: PointerEvent): void => {
+    if (this.thumbDrag?.pointer !== e.pointerId) return;
+    this.thumbDrag = null;
+    this.thumb.classList.remove("dragging");
+  };
+
   private prepare(ctx: CanvasRenderingContext2D): void {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, -this.scrollY * this.dpr);
     ctx.fillStyle = this.inkColor;
@@ -210,6 +331,7 @@ export class InkCanvas {
     this.drawBackground(ctx);
     ctx.fillStyle = this.inkColor;
     for (const stroke of this.strokes) ctx.fill(strokePath(stroke));
+    this.updateScrollbar();
   }
 
   /** Grid, rules or dots in page coordinates, so they scroll with the ink. Never part of what is recognised. */
@@ -270,8 +392,20 @@ export class InkCanvas {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
-    // Fingers and palms never ink; a resting hand must not leave marks.
-    if (e.pointerType === "touch" || this.activePointer !== null) return;
+    if (e.pointerType === "pen") this.lastPenAt = e.timeStamp;
+    // Fingers and palms never ink; a resting hand must not leave marks. A finger may drag the
+    // page, but only when the pen is not in use, so a palm laid down while writing does nothing.
+    if (e.pointerType === "touch") {
+      const penBusy = this.activePointer !== null || e.timeStamp - this.lastPenAt < PEN_QUIET_MS;
+      if (!penBusy && this.pan === null) {
+        this.live.setPointerCapture(e.pointerId);
+        this.pan = { pointer: e.pointerId, lastY: e.clientY };
+      }
+      return;
+    }
+    // The pen has arrived: a finger that was scrolling was a hand coming to rest.
+    this.pan = null;
+    if (this.activePointer !== null) return;
     const isEraserEnd = e.button === ERASER_BUTTON || (e.buttons & ERASER_BUTTONS_BIT) !== 0;
     const isSecondary =
       !isEraserEnd && (e.button === SECONDARY_BUTTON || (e.pointerType === "pen" && (e.buttons & SECONDARY_BUTTONS_BIT) !== 0));
@@ -306,6 +440,13 @@ export class InkCanvas {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
+    // Hovering counts: the pen is near, so the hand is about to write.
+    if (e.pointerType === "pen") this.lastPenAt = e.timeStamp;
+    if (this.pan && e.pointerId === this.pan.pointer) {
+      this.scrollBy(this.pan.lastY - e.clientY);
+      this.pan.lastY = e.clientY;
+      return;
+    }
     if (e.pointerId !== this.activePointer) return;
     const samples = e.getCoalescedEvents?.() ?? [];
     const events = samples.length ? samples : [e];
@@ -325,6 +466,10 @@ export class InkCanvas {
   };
 
   private onPointerEnd = (e: PointerEvent): void => {
+    if (this.pan?.pointer === e.pointerId) {
+      this.pan = null;
+      return;
+    }
     if (e.pointerId !== this.activePointer) return;
     this.activePointer = null;
 
@@ -358,9 +503,6 @@ export class InkCanvas {
 
   private onWheel = (e: WheelEvent): void => {
     e.preventDefault();
-    this.scrollY = Math.max(0, this.scrollY + e.deltaY);
-    this.redraw();
-    this.requestLive();
-    this.events.onScroll?.(this.scrollY);
+    this.scrollBy(e.deltaY);
   };
 }

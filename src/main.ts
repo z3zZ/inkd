@@ -17,7 +17,7 @@ import { createNoteStore } from "./notes/store";
 import { createRecognizer } from "./recognition/TauriOnnxRecognizer";
 import { bindEngineControls } from "./settings/engine";
 import { ModelSetup } from "./settings/ModelSetup";
-import { applyTheme, loadView, ViewMenu, type ViewSettings } from "./settings/view";
+import { applyTheme, bindKeepCorrections, keepsCorrections, loadView, ViewMenu, type ViewSettings } from "./settings/view";
 
 const IDLE_MS = 600;
 
@@ -126,6 +126,10 @@ function openCorrection(line: Line): void {
         setStatus("Back to what the model read.", original);
         return;
       }
+      if (!keepsCorrections()) {
+        setStatus("Corrected.", latex, false, () => openCorrection(line));
+        return;
+      }
       setStatus("Corrected, and kept for training the model on your handwriting.", latex, false, () =>
         openCorrection(line),
       );
@@ -220,7 +224,14 @@ function applyView(view: ViewSettings): void {
   controller.setAnswerFormat(view.answers);
   controller.setAngleUnit(view.angles);
 }
-new ViewMenu(document.getElementById("view-toggle") as HTMLButtonElement, applyView);
+bindKeepCorrections(document.getElementById("keep-corrections") as HTMLInputElement);
+new ViewMenu(document.getElementById("view-toggle") as HTMLButtonElement, applyView, document.getElementById("view-extras")!);
+
+// The toolbar wraps onto a second row in a narrow window; the panels below start under it.
+const toolbar = document.querySelector<HTMLElement>(".toolbar")!;
+new ResizeObserver(() => {
+  document.documentElement.style.setProperty("--toolbar-h", `${toolbar.offsetHeight}px`);
+}).observe(toolbar);
 applyView(loadView());
 // "System" theme follows Windows when it switches between light and dark.
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
@@ -260,6 +271,15 @@ window.addEventListener("keydown", (e) => {
   } else if (baseline && mod && e.shiftKey && key === "b") {
     e.preventDefault();
     baseline.toggle();
+  } else if (key === "pagedown" || key === "pageup") {
+    e.preventDefault();
+    ink.scrollPages(key === "pagedown" ? 0.85 : -0.85);
+  } else if (!mod && (key === "arrowdown" || key === "arrowup")) {
+    e.preventDefault();
+    ink.scrollBy(key === "arrowdown" ? 64 : -64);
+  } else if (key === "home") {
+    e.preventDefault();
+    ink.scrollTo(0);
   } else if (!mod && key === "p") {
     selectTool("pen");
   } else if (!mod && key === "e") {
@@ -279,13 +299,25 @@ if (isTauri()) {
     },
   });
   let shownSetup = false;
-  const engineControls = bindEngineControls(document.getElementById("engine")!, {
+  const engineControls = bindEngineControls(
+    document.getElementById("engine")!,
+    document.getElementById("engine-alert") as HTMLButtonElement,
+    {
     onMissing: (status, fromClick) => {
       // Open by itself once per launch; after "Not now" only the toolbar link opens it.
       if (shownSetup && !fromClick) return;
       shownSetup = true;
       setup.show(status);
     },
+  },
+  );
+  void invoke<string>("app_version").then((version) => {
+    document.getElementById("about")!.textContent = `inkd ${version} · your answers, inked.`;
+  });
+  const openData = document.getElementById("open-data") as HTMLButtonElement;
+  openData.hidden = false;
+  openData.addEventListener("click", () => {
+    invoke("open_data_folder").catch((error) => setStatus(`Could not open the folder: ${error}`, undefined, true));
   });
   // A newer release on GitHub: a quiet link to its download page. Never an error.
   void invoke<{ version: string; url: string } | null>("check_update")

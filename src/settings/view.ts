@@ -72,6 +72,29 @@ function saveView(view: ViewSettings): void {
   }
 }
 
+const KEEP_CORRECTIONS_KEY = "inkd.keepCorrections";
+
+/** Whether hand corrections are kept, with the line's image, for training. On unless turned off. */
+export function keepsCorrections(): boolean {
+  try {
+    return localStorage.getItem(KEEP_CORRECTIONS_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+/** Wires the "keep my corrections" checkbox to its saved setting. */
+export function bindKeepCorrections(checkbox: HTMLInputElement): void {
+  checkbox.checked = keepsCorrections();
+  checkbox.addEventListener("change", () => {
+    try {
+      localStorage.setItem(KEEP_CORRECTIONS_KEY, checkbox.checked ? "on" : "off");
+    } catch {
+      // Not remembered this time; nothing else to do.
+    }
+  });
+}
+
 /** Applies a theme to the page. "system" follows Windows' light or dark setting. */
 export function applyTheme(theme: Theme): void {
   if (theme === "system") delete document.documentElement.dataset.theme;
@@ -86,6 +109,8 @@ export class ViewMenu {
   constructor(
     private readonly button: HTMLButtonElement,
     private readonly onChange: (view: ViewSettings) => void,
+    /** Shown under the choices: the settings that are not one-of-several, and the About line. */
+    private readonly extras?: HTMLElement,
   ) {
     this.view = loadView();
     this.root = document.createElement("div");
@@ -158,5 +183,9 @@ export class ViewMenu {
       return group;
     });
     this.root.replaceChildren(...groups);
+    if (this.extras) {
+      this.extras.hidden = false;
+      this.root.append(this.extras);
+    }
   }
 }

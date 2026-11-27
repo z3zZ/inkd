@@ -41,9 +41,13 @@ export interface EngineControls {
   show(status: EngineStatus): void;
 }
 
-/** Wires the toolbar's backend label and Force CPU checkbox. */
+/**
+ * Wires the backend label and Force CPU checkbox in the View menu, and the toolbar button that
+ * appears only when the model needs attention: not downloaded yet, or failed to load.
+ */
 export function bindEngineControls(
   root: HTMLElement,
+  alert: HTMLButtonElement,
   /** fromClick: the user clicked "Download model", rather than a status arriving. */
   events: { onMissing?: (status: EngineStatus, fromClick: boolean) => void } = {},
 ): EngineControls {
@@ -69,15 +73,23 @@ export function bindEngineControls(
             : "No model";
     label.className = status.modelMissing ? "link" : failed || status.loadError ? "warn" : "";
     label.title = status.modelMissing ? "Download the handwriting model" : (status.gpuError ?? status.loadError ?? "");
+    const broken = !status.modelMissing && status.loadError !== null;
+    alert.hidden = !status.modelMissing && !broken;
+    alert.textContent = status.modelMissing ? "Download model" : "Model problem";
+    alert.title = status.modelMissing
+      ? "Lines are read once the handwriting model is downloaded"
+      : `${status.loadError ?? ""} Details are in inkd.log, next to the model.`;
     if (status.modelMissing) events.onMissing?.(status, false);
   };
 
   root.hidden = false;
   label.textContent = "Loading model…";
   checkbox.disabled = true;
-  label.addEventListener("click", () => {
-    if (missing) events.onMissing?.(missing, true);
-  });
+  for (const el of [label, alert]) {
+    el.addEventListener("click", () => {
+      if (missing) events.onMissing?.(missing, true);
+    });
+  }
   checkbox.addEventListener("change", () => {
     checkbox.disabled = true;
     label.textContent = "Loading model…";

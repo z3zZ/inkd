@@ -15,6 +15,9 @@
   --guide: #e3e0d6;
   --shadow: rgb(0 0 0 / .1);
   --backdrop: rgb(29 36 51 / .28);
+  /* Set from the toolbar's real height, which grows when it wraps in a narrow window. */
+  --toolbar-h: 40px;
+  --graph-w: min(440px, 55vw);
   /* Curve colours: a validated categorical palette, in fixed order. */
   --series-1: #2a78d6;
   --series-2: #eb6834;
@@ -97,20 +100,22 @@ html, body {
   user-select: none;
 }
 
-body { display: grid; grid-template-rows: 40px 1fr 26px; }
+body { display: grid; grid-template-rows: auto minmax(0, 1fr) 26px; }
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  padding: 0 10px;
+  min-height: 40px;
+  padding: 5px 10px;
   background: var(--chrome);
   border-bottom: 1px solid var(--chrome-line);
 }
 .brand { font-weight: 600; letter-spacing: .02em; margin-right: 12px; color: var(--accent); }
 .sep { width: 1px; height: 20px; margin: 0 6px; background: var(--chrome-line); }
 .spacer { flex: 1; }
-.engine { display: flex; align-items: center; gap: 12px; color: var(--chrome-text); font-size: 12px; }
+.engine { display: flex; align-items: center; gap: 8px; color: var(--chrome-text); font-size: 12px; }
 .engine[hidden] { display: none; }
 .engine label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
 .engine .warn { color: var(--error); }
@@ -135,6 +140,22 @@ body { display: grid; grid-template-rows: 40px 1fr 26px; }
 .stage.erasing { cursor: cell; }
 
 .overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+
+/* Scrolls the page without a mouse wheel: drag it with the pen, a finger or the mouse. */
+.scrollbar { position: absolute; top: 4px; right: 2px; bottom: 4px; width: 14px; touch-action: none; cursor: default; }
+.scrollbar[hidden] { display: none; }
+.scroll-thumb {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  width: 6px;
+  border-radius: 3px;
+  background: var(--chrome-text);
+  opacity: .35;
+  touch-action: none;
+  transition: width .1s, opacity .1s;
+}
+.scrollbar:hover .scroll-thumb, .scroll-thumb.dragging { width: 10px; opacity: .6; }
 .result {
   position: absolute;
   transform: translateY(-50%);
@@ -185,6 +206,8 @@ body { display: grid; grid-template-rows: 40px 1fr 26px; }
 .tool.primary:hover:not(:disabled) { background: var(--accent-hover); }
 
 .note-title-input {
+  flex: 0 1 180px;
+  min-width: 90px;
   width: 180px;
   height: 28px;
   margin-left: 4px;
@@ -204,7 +227,7 @@ body { display: grid; grid-template-rows: 40px 1fr 26px; }
 
 .notes {
   position: fixed;
-  top: 40px;
+  top: var(--toolbar-h);
   bottom: 26px;
   left: 0;
   width: 300px;
@@ -391,6 +414,13 @@ body { display: grid; grid-template-rows: 40px 1fr 26px; }
   box-shadow: 0 4px 16px var(--shadow);
 }
 .view-menu[hidden] { display: none; }
+.view-extras { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--chrome-line); color: var(--chrome-text); font-size: 12px; }
+.view-extras[hidden] { display: none; }
+.view-check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.view-about { display: flex; align-items: center; gap: 8px; }
+.view-about .tool { height: 24px; border-color: var(--chrome-line); font-size: 12px; }
+.view-about .tool[hidden] { display: none; }
+.view-version { font-style: italic; }
 .view-group { display: grid; gap: 5px; }
 .view-label { color: var(--chrome-text); font-size: 12px; font-weight: 600; }
 .segmented { display: flex; padding: 2px; border-radius: 7px; background: var(--chrome); }
@@ -409,13 +439,13 @@ body { display: grid; grid-template-rows: 40px 1fr 26px; }
 .segmented button[aria-checked="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px var(--shadow); }
 
 /* Graph: docked on the right; the page narrows to make room. */
-body.graph-open .stage { margin-right: 440px; }
+body.graph-open .stage { margin-right: var(--graph-w); }
 .graph {
   position: fixed;
-  top: 40px;
+  top: var(--toolbar-h);
   right: 0;
   bottom: 26px;
-  width: 440px;
+  width: var(--graph-w);
   display: flex;
   flex-direction: column;
   background: var(--chrome);

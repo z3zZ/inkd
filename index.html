@@ -25,18 +25,32 @@
       <button id="graph-toggle" class="tool" aria-expanded="false" aria-controls="graph" title="Graph the curves on this page (Ctrl+G)">Graph</button>
       <button id="view-toggle" class="tool" aria-expanded="false" title="Theme, page, answer format and angle unit">View</button>
       <span class="spacer"></span>
+      <button id="engine-alert" class="update-link" hidden></button>
       <button id="update" class="update-link" title="Open the download page in your browser" hidden></button>
-      <span id="engine" class="engine" hidden>
-        <span id="engine-backend"></span>
-        <label title="Run recognition on the CPU only. Slower, but avoids the GPU entirely.">
-          <input id="force-cpu" type="checkbox" /> Force CPU
-        </label>
-      </span>
     </header>
     <main id="stage" class="stage"></main>
     <aside id="notes" class="notes" aria-label="Notes" hidden></aside>
     <aside id="graph" class="graph" aria-label="Graph" hidden></aside>
     <aside id="baseline" class="baseline" hidden></aside>
+    <!-- Moved into the View menu when the app starts. -->
+    <div id="view-extras" class="view-extras" hidden>
+      <label class="view-check" title="Each correction is kept on this computer with a picture of the line, for training the model on your handwriting. Nothing is sent anywhere.">
+        <input id="keep-corrections" type="checkbox" checked /> Keep my corrections for training
+      </label>
+      <div id="engine" class="engine" hidden>
+        <span class="view-label">Recognition</span>
+        <span id="engine-backend"></span>
+        <span class="spacer"></span>
+        <label title="Run recognition on the CPU only. Slower, but avoids the GPU entirely.">
+          <input id="force-cpu" type="checkbox" /> Force CPU
+        </label>
+      </div>
+      <div class="view-about">
+        <span id="about" class="view-version">inkd · your answers, inked.</span>
+        <span class="spacer"></span>
+        <button id="open-data" class="tool" title="Open the folder holding your notes, deleted notes (trash) and kept corrections" hidden>Notes folder</button>
+      </div>
+    </div>
     <footer id="status" class="status" role="status" aria-live="polite"></footer>
     <script type="module" src="/src/main.ts"></script>
   </body>
