@@ -1,0 +1,55 @@
+name: Bug report
+description: Something in inkd does not work as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: written
+    attributes:
+      label: What did you write?
+      description: If a line was misread or solved wrongly, the line as you wrote it, e.g. "3/4 + 1/2 =".
+  - type: input
+    id: read
+    attributes:
+      label: What did inkd read it as?
+      description: The text shown in the status bar after the line is read, or in the ? mark beside it.
+  - type: input
+    id: version
+    attributes:
+      label: inkd version
+      description: Shown in the View menu.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2
+  - type: input
+    id: tablet
+    attributes:
+      label: Pen or tablet
+      description: Model, and whether Windows Ink is turned on in its driver.
+      placeholder: XP-Pen Deco 01 V2, Windows Ink on
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Recognition runs on
+      description: Shown in the View menu.
+      options:
+        - GPU
+        - CPU
+        - CPU (GPU failed)
+        - Not sure
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: A screenshot helps a lot. Do not attach notes you would not want public.

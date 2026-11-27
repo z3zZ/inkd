@@ -1,6 +1,8 @@
 Third-party software in inkd
 ============================
 
+inkd itself is under the MIT licence.
+
 DirectML.dll
   Microsoft DirectX Machine Learning 1.15.4, x64. The unmodified file from
   Microsoft's Microsoft.AI.DirectML NuGet package. Closed source, under the
@@ -14,7 +16,14 @@ TexTeller handwriting model
   7b96df06b9d81cdb129c3bef68b7250bc3e2b0ea), under the Apache License 2.0
   in TexTeller-LICENSE.txt.
 
-Everything else built into inkd.exe and its interface is under permissive
-licences (MIT, Apache-2.0, BSD, ISC, Zlib, CDLA-Permissive-2.0), including
-Tauri, ONNX Runtime and ort, tokenizers, ureq and rustls, perfect-freehand,
-mathjs and KaTeX.
+Everything else
+  The open-source software built into inkd.exe and its interface, including
+  Tauri, ONNX Runtime and ort, tokenizers, ureq and rustls, perfect-freehand,
+  mathjs and KaTeX, is listed with its licence text in
+  THIRD-PARTY-NOTICES.txt. Almost all of it is under permissive licences
+  (MIT, Apache-2.0, BSD, ISC, Zlib, Unicode-3.0, CDLA-Permissive-2.0).
+
+  A few Rust crates (cssparser, cssparser-macros, selectors, dtoa-short and
+  option-ext) are under the Mozilla Public License 2.0. They are used
+  unmodified, and their source code is available from the addresses given
+  for them in THIRD-PARTY-NOTICES.txt.

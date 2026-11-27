@@ -1,0 +1,16 @@
+name: Feature request
+description: Something you would like inkd to do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you like?
+      description: What you are trying to do, and how inkd could help.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: An example
+      description: For maths, the line you would write and the answer you would expect.

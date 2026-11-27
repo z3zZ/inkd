@@ -22,25 +22,40 @@ jobs:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      # Actions are pinned to a commit, so a moved tag cannot change what builds the installer.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.TAG }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: src-tauri
+
+      # The tag, package.json, Cargo.toml and tauri.conf.json must all name the same version,
+      # or the update notice would compare against the wrong one.
+      - name: Check the version matches the tag
+        shell: bash
+        run: |
+          want="${TAG#v}"
+          pkg=$(node -p "require('./package.json').version")
+          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          cargo=$(grep -m1 '^version = ' src-tauri/Cargo.toml | cut -d'"' -f2)
+          echo "tag $want, package.json $pkg, tauri.conf.json $conf, Cargo.toml $cargo"
+          [ "$pkg" = "$want" ] && [ "$conf" = "$want" ] && [ "$cargo" = "$want" ]
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Test
+      - name: Test the interface
         run: npm test
 
       - name: Fetch DirectML.dll
@@ -51,13 +66,24 @@ jobs:
       # crashes if they don't exist yet, which they don't on a fresh runner.
       - name: Prepare build folders
         shell: bash
-        run: mkdir -p src-tauri/target/release/{examples,deps} src-tauri/target/release/build/{examples,deps}
+        run: mkdir -p src-tauri/target/release/{examples,deps} src-tauri/target/release/build/{examples,deps} src-tauri/target/debug/{examples,deps} src-tauri/target/debug/build/{examples,deps}
+
+      - name: Test the backend
+        run: cargo test --lib --manifest-path src-tauri/Cargo.toml
+
+      - name: Write third-party notices
+        run: node scripts/notices.mjs
 
       - name: Build installer
         run: npm run tauri build
 
+      # No --clobber: an installer that is already published is never silently replaced.
+      # To rebuild one, delete the old files from the release first.
       - name: Attach to release
         shell: bash
         run: |
-          installer=$(ls src-tauri/target/release/bundle/nsis/*-setup.exe | head -n1)
-          gh release upload "$TAG" "$installer" --clobber --repo "$GITHUB_REPOSITORY"
+          cd src-tauri/target/release/bundle/nsis
+          installer=$(ls *-setup.exe | head -n1)
+          sha256sum "$installer" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          gh release upload "$TAG" "$installer" SHA256SUMS.txt --repo "$GITHUB_REPOSITORY"
