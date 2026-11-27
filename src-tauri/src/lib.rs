@@ -4,7 +4,7 @@ pub mod updates;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use tauri::ipc::Channel;
 
@@ -23,6 +23,56 @@ fn selftest_folder() -> Option<PathBuf> {
     } else {
         None
     }
+}
+
+/// Where problems are written down, since an installed copy has no console.
+static LOG_FILE: OnceLock<PathBuf> = OnceLock::new();
+const LOG_LIMIT: u64 = 512 * 1024;
+
+/// "2026-11-27 21:04:09Z" for a time in seconds since 1970, without pulling in a date library.
+fn utc_timestamp(secs: u64) -> String {
+    let (days, rest) = (secs / 86_400, secs % 86_400);
+    // Civil date from a day count (Howard Hinnant's algorithm).
+    let z = days as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02} {:02}:{:02}:{:02}Z", rest / 3600, rest % 3600 / 60, rest % 60)
+}
+
+/// Notes a problem in inkd.log in the app's local data folder (and on the console in dev).
+/// Never holds what was written on the page: only what went wrong.
+fn log(message: &str) {
+    eprintln!("{message}");
+    let Some(path) = LOG_FILE.get() else { return };
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    use std::io::Write;
+    let _ = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .and_then(|mut f| writeln!(f, "{} {message}", utc_timestamp(secs)));
+}
+
+/// Starts the log: sets where it goes, keeps it from growing without end, and records panics.
+fn start_log(path: PathBuf) {
+    if std::fs::metadata(&path).map(|m| m.len() > LOG_LIMIT).unwrap_or(false) {
+        let _ = std::fs::rename(&path, path.with_extension("old.log"));
+    }
+    let _ = LOG_FILE.set(path);
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        log(&format!("panic: {info}"));
+        previous(info);
+    }));
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -85,7 +135,7 @@ impl Engine {
         slot.missing = false;
         let Some(dir) = dirs.iter().find(|d| has_model(d)) else {
             slot.missing = true;
-            eprintln!("model not found; looked in: {dirs:?}");
+            log(&format!("model not found; looked in: {dirs:?}"));
             slot.model = Some(Err(
                 "Lines will be read once the handwriting model is downloaded (see the toolbar).".into(),
             ));
@@ -93,10 +143,16 @@ impl Engine {
         };
         match Recognizer::load_best(dir, self.force_cpu()) {
             Ok((model, gpu_error)) => {
+                if let Some(error) = &gpu_error {
+                    log(&format!("GPU not used, reading on the CPU instead: {error}"));
+                }
                 slot.model = Some(Ok(model));
                 slot.gpu_error = gpu_error;
             }
-            Err(error) => slot.model = Some(Err(format!("Could not load the model: {error}"))),
+            Err(error) => {
+                log(&format!("could not load the model from {}: {error}", dir.display()));
+                slot.model = Some(Err(format!("Could not load the model: {error}")));
+            }
         }
     }
 
@@ -112,6 +168,7 @@ impl Engine {
             Ok(recognition) => Ok(recognition),
             Err(error) if backend == Backend::DirectMl => {
                 // The GPU can fail after a good start, e.g. a driver reset. Finish on the CPU.
+                log(&format!("GPU failed while reading a line, switching to the CPU: {error}"));
                 let dirs = self.model_dirs.lock().unwrap().clone();
                 let dir = dirs.iter().find(|d| has_model(d)).ok_or("model folder is gone")?;
                 let mut cpu = Recognizer::load(dir, Backend::Cpu).map_err(|e| e.to_string())?;
@@ -258,6 +315,14 @@ fn app_version(app: AppHandle) -> String {
     app.package_info().version.to_string()
 }
 
+/// Shows the folder holding notes, the trash and kept corrections in File Explorer.
+#[tauri::command]
+fn open_data_folder(app: AppHandle) -> Result<(), String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::process::Command::new("explorer").arg(&dir).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn selftest_dir() -> Option<String> {
     selftest_folder().map(|dir| dir.display().to_string())
@@ -345,7 +410,7 @@ async fn notes_list(app: AppHandle) -> Result<Vec<NoteMeta>, String> {
                 serde_json::from_slice::<NoteMeta>(&b).map_err(|e| e.to_string())
             }) {
                 Ok(meta) => notes.push(meta),
-                Err(error) => eprintln!("skipping note {}: {error}", path.display()),
+                Err(error) => log(&format!("skipping note {}: {error}", path.display())),
             }
         }
         notes.sort_by(|a, b| b.updated_at.total_cmp(&a.updated_at));
@@ -455,6 +520,8 @@ pub fn run() {
         }));
     }
     builder
+        // Reopens at the size and place the window was last left.
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(engine.clone())
         .setup(move |app| {
             let mut dirs = Vec::new();
@@ -462,6 +529,8 @@ pub fn run() {
                 dirs.push(PathBuf::from(dir));
             }
             if let Ok(data) = app.path().app_local_data_dir() {
+                let _ = std::fs::create_dir_all(&data);
+                start_log(data.join("inkd.log"));
                 let models = data.join("models").join("texteller");
                 *engine.download_dir.lock().unwrap() = Some(models.clone());
                 dirs.push(models);
@@ -499,8 +568,21 @@ pub fn run() {
             model_download_cancel,
             check_update,
             open_release_page,
-            app_version
+            app_version,
+            open_data_folder
         ])
         .run(tauri::generate_context!())
         .expect("failed to start inkd");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn timestamps_are_utc_dates() {
+        assert_eq!(utc_timestamp(0), "1970-01-01 00:00:00Z");
+        assert_eq!(utc_timestamp(951_782_400), "2000-02-29 00:00:00Z");
+        assert_eq!(utc_timestamp(1_795_813_449), "2026-11-27 21:04:09Z");
+    }
 }

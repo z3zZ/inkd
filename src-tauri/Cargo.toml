@@ -37,6 +37,7 @@ ureq = "2"
 sha2 = "0.10"
 tokenizers = { version = "0.23", default-features = false, features = ["fancy-regex"] }
 tauri-plugin-single-instance = "2"
+tauri-plugin-window-state = "2"
 
 # ONNX inference is unusably slow unoptimised, even in dev builds.
 [profile.dev.package."*"]

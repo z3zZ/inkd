@@ -25,7 +25,25 @@ const EOS_TOKEN: i64 = 2;
 /// A single handwritten line never needs more; this bounds a decoder stuck in a loop.
 const MAX_TOKENS: usize = 256;
 
+/// Shortest run of output that counts as the decoder going round in circles.
+const LOOP_MIN_TOKENS: usize = 16;
+/// Longest repeating unit looked for.
+const LOOP_MAX_PERIOD: usize = 8;
+
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
+
+/// Whether the output ends in the same few tokens over and over: at least four repeats of a
+/// unit of up to `LOOP_MAX_PERIOD` tokens, and at least `LOOP_MIN_TOKENS` long. A decoder that
+/// has lost the line does this until the token limit, holding up every other line meanwhile.
+fn stuck_in_loop(ids: &[i64]) -> bool {
+    (1..=LOOP_MAX_PERIOD).any(|period| {
+        let span = (period * 4).max(LOOP_MIN_TOKENS);
+        ids.len() > span && {
+            let tail = &ids[ids.len() - span..];
+            tail.iter().zip(&tail[period..]).all(|(a, b)| a == b)
+        }
+    })
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Recognition {
@@ -246,6 +264,9 @@ impl Recognizer {
                 break;
             }
             ids.push(next);
+            if stuck_in_loop(&ids) {
+                return Err("the model kept repeating itself instead of reading the line".into());
+            }
         }
 
         let produced = ids.len();
@@ -346,6 +367,25 @@ mod tests {
     #[test]
     fn blank_image_is_an_error() {
         assert!(preprocess(&GrayImage::from_pixel(64, 64, Luma([255]))).is_err());
+    }
+
+    #[test]
+    fn spots_a_decoder_going_in_circles() {
+        // One token over and over.
+        let mut ids = vec![0, 5, 9];
+        ids.extend(std::iter::repeat(7).take(17));
+        assert!(stuck_in_loop(&ids));
+        // A unit of three tokens over and over.
+        let mut ids = vec![0, 5, 9];
+        for _ in 0..6 {
+            ids.extend([11, 12, 13]);
+        }
+        assert!(stuck_in_loop(&ids));
+        // Ordinary output, including a long run of one digit, is left alone.
+        assert!(!stuck_in_loop(&[0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 3]));
+        let varied: Vec<i64> = (0..200).map(|i| (i * 7 + i / 3) % 23).collect();
+        assert!(!stuck_in_loop(&varied));
+        assert!(!stuck_in_loop(&[]));
     }
 
     #[test]
