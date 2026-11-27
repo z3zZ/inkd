@@ -1,4 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import "katex/dist/katex.min.css";
 import { InkCanvas, type Tool } from "./canvas/InkCanvas";
 import { GraphPanel } from "./graph/GraphPanel";
@@ -225,7 +226,8 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () 
   graph.refreshTheme();
 });
 
-const baseline = new BaselinePanel(document.getElementById("baseline")!, ink, recognizer);
+// Development builds only: records the handwritten baseline (Ctrl+Shift+B).
+const baseline = import.meta.env.DEV ? new BaselinePanel(document.getElementById("baseline")!, ink, recognizer) : null;
 
 window.addEventListener("keydown", (e) => {
   // Typing a title must not trigger tools or undo ink.
@@ -253,7 +255,7 @@ window.addEventListener("keydown", (e) => {
   } else if (mod && key === "y") {
     e.preventDefault();
     ink.redo();
-  } else if (mod && e.shiftKey && key === "b") {
+  } else if (baseline && mod && e.shiftKey && key === "b") {
     e.preventDefault();
     baseline.toggle();
   } else if (!mod && key === "p") {
@@ -297,8 +299,12 @@ if (isTauri()) {
       });
     })
     .catch(() => {});
+  // Closing right after writing must not lose the last stroke: write it before the window goes.
+  void getCurrentWindow().onCloseRequested(async () => {
+    await session.flush();
+  });
   void invoke<string | null>("selftest_dir").then((dir) => {
-    if (dir) void session.create().then(() => runSelfTest(ink, recognizer, controller, session, setStatus));
+    if (dir && import.meta.env.DEV) void session.create().then(() => runSelfTest(ink, recognizer, controller, session, setStatus));
     else void session.start();
   });
 } else {

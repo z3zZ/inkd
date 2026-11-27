@@ -15,6 +15,16 @@ use tauri::{AppHandle, Manager, State};
 
 const SELFTEST_ENV: &str = "INKD_SELFTEST";
 
+/// The self-test's output folder. Dev builds only: an installed copy ignores the variable,
+/// so nothing in the environment can move where it keeps notes.
+fn selftest_folder() -> Option<PathBuf> {
+    if cfg!(debug_assertions) {
+        std::env::var_os(SELFTEST_ENV).map(PathBuf::from)
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 struct Settings {
@@ -230,7 +240,7 @@ fn model_download_cancel(engine: State<'_, Engine>) {
 /// The newer release on GitHub, if there is one. Never an error: no answer means no update.
 #[tauri::command]
 async fn check_update(app: AppHandle, engine: State<'_, Engine>) -> Result<Option<updates::Update>, String> {
-    if engine.settings.lock().unwrap().no_update_check || std::env::var_os(SELFTEST_ENV).is_some() {
+    if engine.settings.lock().unwrap().no_update_check || selftest_folder().is_some() {
         return Ok(None);
     }
     let current = app.package_info().version.to_string();
@@ -250,17 +260,24 @@ fn app_version(app: AppHandle) -> String {
 
 #[tauri::command]
 fn selftest_dir() -> Option<String> {
-    std::env::var(SELFTEST_ENV).ok()
+    selftest_folder().map(|dir| dir.display().to_string())
 }
 
+/// Closes the app when the self-test is done. Does nothing in an installed copy.
 #[tauri::command]
 fn selftest_finish(app: AppHandle) {
-    app.exit(0);
+    if selftest_folder().is_some() {
+        app.exit(0);
+    }
 }
 
 /// Writes baseline and self-test output: to the self-test folder if set, else app data.
+/// Dev builds only.
 #[tauri::command]
 fn dev_write(app: AppHandle, request: Request<'_>) -> Result<String, String> {
+    if !cfg!(debug_assertions) {
+        return Err("only available in development builds".into());
+    }
     let name = request
         .headers()
         .get("x-file-name")
@@ -272,8 +289,8 @@ fn dev_write(app: AppHandle, request: Request<'_>) -> Result<String, String> {
     if !is_plain {
         return Err("bad file name".into());
     }
-    let dir = match std::env::var_os(SELFTEST_ENV) {
-        Some(dir) => PathBuf::from(dir),
+    let dir = match selftest_folder() {
+        Some(dir) => dir,
         None => app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("baseline"),
     };
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -284,8 +301,8 @@ fn dev_write(app: AppHandle, request: Request<'_>) -> Result<String, String> {
 
 /// Note files: the self-test folder when running the self-test, so it never touches real notes.
 fn notes_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = match std::env::var_os(SELFTEST_ENV) {
-        Some(dir) => PathBuf::from(dir).join("notes"),
+    let dir = match selftest_folder() {
+        Some(dir) => dir.join("notes"),
         None => app.path().app_data_dir().map_err(|e| e.to_string())?.join("notes"),
     };
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -401,8 +418,8 @@ fn correction_log(app: AppHandle, request: Request<'_>) -> Result<(), String> {
     }
     let correction: Correction = serde_json::from_slice(json).map_err(|e| e.to_string())?;
 
-    let dir = match std::env::var_os(SELFTEST_ENV) {
-        Some(dir) => PathBuf::from(dir).join("corrections"),
+    let dir = match selftest_folder() {
+        Some(dir) => dir.join("corrections"),
         None => app.path().app_data_dir().map_err(|e| e.to_string())?.join("corrections"),
     };
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -428,7 +445,7 @@ pub fn run() {
     // One copy at a time: two would both save the same notes and overwrite each other.
     // Opening inkd again brings the running window forward. Left out of dev builds and
     // self-tests, so they still run while an installed copy is open.
-    if !cfg!(debug_assertions) && std::env::var_os(SELFTEST_ENV).is_none() {
+    if !cfg!(debug_assertions) {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
