@@ -2,7 +2,7 @@
 
 What changed in each release of inkd. Newest first.
 
-## Unreleased
+## 0.2.0 - 2026-11-27
 
 ### Added
 - **Update notice.** When a newer release is on GitHub, a link appears in the toolbar and opens its download page. inkd never downloads or installs anything by itself. Set `INKD_NO_UPDATE_CHECK`, or `"noUpdateCheck": true` in `settings.json`, to turn the check off.
