@@ -1,5 +1,6 @@
 pub mod download;
 pub mod recognizer;
+pub mod updates;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -18,6 +19,8 @@ const SELFTEST_ENV: &str = "INKD_SELFTEST";
 #[serde(rename_all = "camelCase", default)]
 struct Settings {
     force_cpu: bool,
+    /// Turns off the check for a newer release at start-up.
+    no_update_check: bool,
 }
 
 /// What the app is running on, for the status bar.
@@ -222,6 +225,27 @@ async fn model_download(engine: State<'_, Engine>, on_progress: Channel<download
 #[tauri::command]
 fn model_download_cancel(engine: State<'_, Engine>) {
     engine.cancel.store(true, Ordering::SeqCst);
+}
+
+/// The newer release on GitHub, if there is one. Never an error: no answer means no update.
+#[tauri::command]
+async fn check_update(app: AppHandle, engine: State<'_, Engine>) -> Result<Option<updates::Update>, String> {
+    if engine.settings.lock().unwrap().no_update_check || std::env::var_os(SELFTEST_ENV).is_some() {
+        return Ok(None);
+    }
+    let current = app.package_info().version.to_string();
+    Ok(tauri::async_runtime::spawn_blocking(move || updates::check(&current)).await.unwrap_or(None))
+}
+
+/// Opens an inkd release page in the browser. Any other link is refused.
+#[tauri::command]
+fn open_release_page(url: String) -> Result<(), String> {
+    updates::open(&url)
+}
+
+#[tauri::command]
+fn app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
 }
 
 #[tauri::command]
@@ -455,7 +479,10 @@ pub fn run() {
             note_delete,
             correction_log,
             model_download,
-            model_download_cancel
+            model_download_cancel,
+            check_update,
+            open_release_page,
+            app_version
         ])
         .run(tauri::generate_context!())
         .expect("failed to start inkd");

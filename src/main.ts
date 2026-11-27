@@ -283,6 +283,20 @@ if (isTauri()) {
       setup.show(status);
     },
   });
+  // A newer release on GitHub: a quiet link to its download page. Never an error.
+  void invoke<{ version: string; url: string } | null>("check_update")
+    .then((update) => {
+      if (!update) return;
+      const link = document.getElementById("update") as HTMLButtonElement;
+      link.textContent = `Update available: v${update.version}`;
+      link.hidden = false;
+      link.addEventListener("click", () => {
+        invoke("open_release_page", { url: update.url }).catch((error) =>
+          setStatus(`Could not open the download page: ${error}`, undefined, true),
+        );
+      });
+    })
+    .catch(() => {});
   void invoke<string | null>("selftest_dir").then((dir) => {
     if (dir) void session.create().then(() => runSelfTest(ink, recognizer, controller, session, setStatus));
     else void session.start();
