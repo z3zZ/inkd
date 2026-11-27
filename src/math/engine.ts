@@ -1,5 +1,5 @@
 import { all, create } from "mathjs";
-import { LatexError, latexToMath } from "./latexToMath";
+import { LatexError, latexToMath, type MathOptions } from "./latexToMath";
 
 const math = create(all);
 // Expressions come from a recognition model, so they get arithmetic and nothing else.
@@ -60,10 +60,10 @@ export function formatValue(value: unknown): string | null {
  *   "x = 5"        → defines x for the lines below
  *   "f(x) = x^2"   → defines f for the lines below
  */
-function solveLine(latex: string, scope: Scope): Solution {
+function solveLine(latex: string, scope: Scope, options: MathOptions): Solution {
   let expression: string;
   try {
-    expression = latexToMath(latex);
+    expression = latexToMath(latex, options);
   } catch (error) {
     if (error instanceof LatexError) return { kind: "none", reason: error.message };
     throw error;
@@ -161,14 +161,14 @@ function asCurve(rhs: string, scope: Scope): Plot | null {
 }
 
 /** Solves a note's lines top to bottom, so each line sees what the lines above define. */
-export function solveNote(latexLines: readonly string[]): Solution[] {
+export function solveNote(latexLines: readonly string[], options: MathOptions = {}): Solution[] {
   const scope: Scope = new Map();
-  return latexLines.map((latex) => solveLine(latex, scope));
+  return latexLines.map((latex) => solveLine(latex, scope, options));
 }
 
 /** Solves a single line on its own. */
-export function solve(latex: string): Solution {
-  return solveLine(latex, new Map());
+export function solve(latex: string, options: MathOptions = {}): Solution {
+  return solveLine(latex, new Map(), options);
 }
 
 const PROBE_SCOPE = { x: 1.37, y: 0.73, a: 2.11, b: 1.19 };

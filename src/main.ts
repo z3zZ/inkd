@@ -217,6 +217,7 @@ function applyView(view: ViewSettings): void {
   ink.refreshTheme();
   graph.refreshTheme();
   controller.setAnswerFormat(view.answers);
+  controller.setAngleUnit(view.angles);
 }
 new ViewMenu(document.getElementById("view-toggle") as HTMLButtonElement, applyView);
 applyView(loadView());

@@ -1,5 +1,6 @@
 import type { PageBackground } from "../canvas/InkCanvas";
 import type { AnswerFormat } from "../math/answerFormat";
+import type { AngleUnit } from "../math/latexToMath";
 
 export type Theme = "system" | "light" | "dark";
 
@@ -7,9 +8,10 @@ export interface ViewSettings {
   theme: Theme;
   background: PageBackground;
   answers: AnswerFormat;
+  angles: AngleUnit;
 }
 
-const DEFAULTS: ViewSettings = { theme: "system", background: "plain", answers: "decimal" };
+const DEFAULTS: ViewSettings = { theme: "system", background: "plain", answers: "decimal", angles: "rad" };
 const KEY = "inkd.view";
 
 const CHOICES: { [K in keyof ViewSettings]: { label: string; options: [ViewSettings[K], string][] } } = {
@@ -38,6 +40,13 @@ const CHOICES: { [K in keyof ViewSettings]: { label: string; options: [ViewSetti
       ["mixed", "1 ¼"],
     ],
   },
+  angles: {
+    label: "Angles (sin, cos, tan)",
+    options: [
+      ["rad", "Radians"],
+      ["deg", "Degrees"],
+    ],
+  },
 };
 
 /** Reads saved view settings, falling back to defaults for anything missing or unknown. */
@@ -52,7 +61,7 @@ export function loadView(): ViewSettings {
     const value = saved[key];
     return CHOICES[key].options.some(([v]) => v === value) ? (value as ViewSettings[K]) : DEFAULTS[key];
   };
-  return { theme: pick("theme"), background: pick("background"), answers: pick("answers") };
+  return { theme: pick("theme"), background: pick("background"), answers: pick("answers"), angles: pick("angles") };
 }
 
 function saveView(view: ViewSettings): void {
@@ -69,7 +78,7 @@ export function applyTheme(theme: Theme): void {
   else document.documentElement.dataset.theme = theme;
 }
 
-/** The View popover: theme, page background and answer format, saved between launches. */
+/** The View popover: theme, page background, answer format and angle unit, saved between launches. */
 export class ViewMenu {
   private readonly root: HTMLElement;
   private view: ViewSettings;

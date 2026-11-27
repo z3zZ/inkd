@@ -17,6 +17,11 @@ describe("latexToMath", () => {
     ["\\dfrac{a}{b}", "((a)/(b))"],
     ["2\\frac{1}{2}", "(2+((1)/(2)))"],
     ["x\\frac{1}{2}", "x*((1)/(2))"],
+    ["2\\frac{x}{3}", "2*((x)/(3))"],
+    ["5-2\\frac{1}{2}", "5-(2+((1)/(2)))"],
+    ["30^{\\circ}", "(30*pi/180)"],
+    ["\\sin(30^{\\circ})", "sin(((30*pi/180)))"],
+    ["\\sin 30^\\circ", "sin((30*pi/180))"],
     ["2x", "2*x"],
     ["xy", "x*y"],
     ["2(3+1)", "2*(3+1)"],
@@ -103,5 +108,29 @@ describe("latexEquivalent", () => {
     ["garbage\\foo", "1"],
   ])("%s !~ %s", (a, b) => {
     expect(latexEquivalent(a, b)).toBe(false);
+  });
+});
+
+describe("angle units", () => {
+  const value = (latex: string, angles: "rad" | "deg") => {
+    const solution = solve(latex, { angles });
+    return solution.kind === "result" ? solution.number : NaN;
+  };
+
+  it("reads a degree sign as degrees, whatever the setting", () => {
+    expect(value("\\sin(30^{\\circ})=", "rad")).toBeCloseTo(0.5, 12);
+    expect(value("\\sin(30^{\\circ})=", "deg")).toBeCloseTo(0.5, 12);
+    expect(value("\\cos 60^\\circ=", "rad")).toBeCloseTo(0.5, 12);
+  });
+
+  it("takes bare numbers as degrees only when asked to", () => {
+    expect(value("\\sin(30)=", "deg")).toBeCloseTo(0.5, 12);
+    expect(value("\\sin(30)=", "rad")).toBeCloseTo(Math.sin(30), 12);
+    expect(value("\\sin^2(30)=", "deg")).toBeCloseTo(0.25, 12);
+  });
+
+  it("answers inverse trig in the same unit", () => {
+    expect(value("\\arcsin(0.5)=", "deg")).toBeCloseTo(30, 9);
+    expect(value("\\arcsin(0.5)=", "rad")).toBeCloseTo(Math.PI / 6, 12);
   });
 });

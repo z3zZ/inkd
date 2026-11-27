@@ -25,6 +25,19 @@ const CONSTANTS: Record<string, string> = { pi: "pi" };
 const GREEK = new Set(["alpha", "beta", "gamma", "delta", "theta", "lambda", "mu", "phi", "omega"]);
 const UNWRAP_COMMANDS = new Set(["mathrm", "mathit", "mathbf", "operatorname", "text", "boldsymbol"]);
 const FRACTIONS = new Set(["frac", "dfrac", "tfrac", "cfrac"]);
+/** Trig functions take an angle; their inverses give one. Only these depend on the angle unit. */
+const TAKES_ANGLE = new Set(["sin", "cos", "tan", "sec", "csc", "cot"]);
+const GIVES_ANGLE = new Set(["asin", "acos", "atan"]);
+/** A fraction of two whole numbers, as `command` writes it: the only kind that makes a mixed number. */
+const WHOLE_FRACTION = /^\(\(\d+\)\/\(\d+\)\)$/;
+
+export type AngleUnit = "rad" | "deg";
+
+export interface MathOptions {
+  /** What a bare number means to sin, cos and tan, and what their inverses answer in. Radians by default. */
+  angles?: AngleUnit;
+}
+
 /** Single letters that read as a function when followed by "(". */
 const FUNCTION_LETTERS = new Set(["f", "g", "h"]);
 
@@ -60,7 +73,10 @@ function tokenize(latex: string): Token[] {
 
 class Translator {
   private pos = 0;
-  constructor(private readonly tokens: Token[]) {}
+  constructor(
+    private readonly tokens: Token[],
+    private readonly angles: AngleUnit,
+  ) {}
 
   run(): string {
     const out = this.sequence(() => this.pos >= this.tokens.length);
@@ -116,8 +132,9 @@ class Translator {
       const isInteger = t.type === "number" && /^\d+$/.test(t.text);
       const atom = this.withPostfix(this.atom());
 
-      if (prevWasInteger && isFraction) {
+      if (prevWasInteger && isFraction && WHOLE_FRACTION.test(atom)) {
         // "2\frac{1}{2}" is a mixed number: add it to the whole part just written.
+        // "2\frac{x}{3}" is not: that is 2 times x over 3, like any other pair of values.
         const whole = /(\d+)$/.exec(out)!;
         out = `${out.slice(0, whole.index)}(${whole[1]}+${atom})`;
       } else {
@@ -132,7 +149,9 @@ class Translator {
     let out = base;
     for (;;) {
       this.skipIgnored();
-      if (this.isSymbol("^")) {
+      if (this.takeDegree()) {
+        out = this.fromDegrees(out);
+      } else if (this.isSymbol("^")) {
         this.pos++;
         out += `^(${this.argument()})`;
       } else if (this.isSymbol("%")) {
@@ -148,6 +167,28 @@ class Translator {
         return out;
       }
     }
+  }
+
+  /** Consumes a degree sign, "^\circ" or "^{\circ}", if one is next. */
+  private takeDegree(): boolean {
+    const at = (offset: number) => this.tokens[this.pos + offset];
+    const isCirc = (offset: number) => at(offset)?.type === "command" && at(offset)!.text === "circ";
+    const symbol = (offset: number, text: string) => at(offset)?.type === "symbol" && at(offset)!.text === text;
+    if (!symbol(0, "^")) return false;
+    if (isCirc(1)) {
+      this.pos += 2;
+      return true;
+    }
+    if (symbol(1, "{") && isCirc(2) && symbol(3, "}")) {
+      this.pos += 4;
+      return true;
+    }
+    return false;
+  }
+
+  /** A value written with a degree sign, in the unit angles are worked in. */
+  private fromDegrees(value: string): string {
+    return this.angles === "deg" ? value : `(${value}*pi/180)`;
   }
 
   /** One argument of a command: a braced group or the next single atom. */
@@ -258,7 +299,13 @@ class Translator {
       power = `^(${this.argument()})`;
     }
     this.skipIgnored();
-    const arg = this.argument();
+    let arg = this.argument();
+    // "\sin 30^\circ": the degree sign belongs to the angle, not to the sine.
+    if (this.takeDegree()) arg = this.fromDegrees(arg);
+    if (this.angles === "deg") {
+      if (TAKES_ANGLE.has(fn)) return `${fn}((${arg})*pi/180)${power}`;
+      if (GIVES_ANGLE.has(fn)) return `(${fn}(${arg})*180/pi)${power}`;
+    }
     return `${fn}(${arg})${power}`;
   }
 }
@@ -274,6 +321,6 @@ export function stripMathDelimiters(latex: string): string {
   return text;
 }
 
-export function latexToMath(latex: string): string {
-  return new Translator(tokenize(stripMathDelimiters(latex))).run();
+export function latexToMath(latex: string, options: MathOptions = {}): string {
+  return new Translator(tokenize(stripMathDelimiters(latex)), options.angles ?? "rad").run();
 }

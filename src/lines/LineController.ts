@@ -4,6 +4,7 @@ import type { BBox } from "../canvas/strokes";
 import { type Plot, type Solution, solveNote } from "../math/engine";
 import { lineKey, type SavedLine } from "../notes/format";
 import { type AnswerFormat, formatAnswer } from "../math/answerFormat";
+import type { AngleUnit } from "../math/latexToMath";
 import type { Recognition, Recognizer } from "../recognition/Recognizer";
 import { type Line, LineSegmenter } from "./LineSegmenter";
 import { rasterizeStrokes } from "./rasterize";
@@ -83,6 +84,7 @@ export class LineController {
   private penDown = false;
   private primed: Map<string, SavedLine> | null = null;
   private answerFormat: AnswerFormat = "decimal";
+  private angles: AngleUnit = "rad";
   private curveColors = new Map<number, string>();
 
   constructor(
@@ -160,6 +162,13 @@ export class LineController {
   setAnswerFormat(format: AnswerFormat): void {
     if (format === this.answerFormat) return;
     this.answerFormat = format;
+    this.resolve();
+  }
+
+  /** Radians or degrees for sin, cos and tan, on every line of the page. */
+  setAngleUnit(angles: AngleUnit): void {
+    if (angles === this.angles) return;
+    this.angles = angles;
     this.resolve();
   }
 
@@ -332,7 +341,7 @@ export class LineController {
     const lines = this.segmenter.all
       .filter((line) => this.states.get(line.id)?.latex != null)
       .sort((a, b) => a.bbox.top - b.bbox.top);
-    const solutions = solveNote(lines.map((line) => this.states.get(line.id)!.latex!));
+    const solutions = solveNote(lines.map((line) => this.states.get(line.id)!.latex!), { angles: this.angles });
     const byLine = new Map(lines.map((line, i) => [line.id, solutions[i]]));
 
     for (const line of this.segmenter.all) {

@@ -38,9 +38,23 @@ export function toFraction(value: number): { numerator: number; denominator: num
   return null;
 }
 
+/**
+ * A decimal as it should be typeset. Very large and very small results arrive in e-notation
+ * ("1.5e+30"), which maths rendering would read as the letter e: write the power of ten out.
+ */
+export function decimalAnswer(decimal: string): FormattedAnswer {
+  const parts = /^(-?\d+(?:\.\d+)?)e([+-])(\d+)$/.exec(decimal);
+  if (!parts) return { latex: decimal, text: decimal };
+  const [, mantissa, sign, digits] = parts;
+  const exponent = `${sign === "-" ? "-" : ""}${digits}`;
+  if (mantissa === "1") return { latex: `10^{${exponent}}`, text: `10^${exponent}` };
+  if (mantissa === "-1") return { latex: `-10^{${exponent}}`, text: `-10^${exponent}` };
+  return { latex: `${mantissa}\\times 10^{${exponent}}`, text: `${mantissa} × 10^${exponent}` };
+}
+
 /** Shows a result as a decimal, an improper fraction or a mixed number. */
 export function formatAnswer(value: number, decimal: string, format: AnswerFormat): FormattedAnswer {
-  const plain = { latex: decimal, text: decimal };
+  const plain = decimalAnswer(decimal);
   if (format === "decimal") return plain;
   const f = toFraction(value);
   if (!f || f.denominator === 1) return plain;

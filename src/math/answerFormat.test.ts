@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAnswer, toFraction } from "./answerFormat";
+import { decimalAnswer, formatAnswer, toFraction } from "./answerFormat";
 
 describe("fractions", () => {
   it("finds exact fractions, including from float noise", () => {
@@ -37,5 +37,22 @@ describe("answer formats", () => {
   it("keeps whole numbers and irrational results as they are", () => {
     expect(formatAnswer(14, "14", "fraction")).toEqual({ latex: "14", text: "14" });
     expect(formatAnswer(Math.SQRT2, "1.41421356237", "mixed")).toEqual({ latex: "1.41421356237", text: "1.41421356237" });
+  });
+});
+
+describe("very large and very small results", () => {
+  it("writes e-notation as a power of ten", () => {
+    expect(decimalAnswer("1.26765060023e+30")).toEqual({
+      latex: "1.26765060023\\times 10^{30}",
+      text: "1.26765060023 × 10^30",
+    });
+    expect(decimalAnswer("-2.5e-7").latex).toBe("-2.5\\times 10^{-7}");
+    expect(decimalAnswer("1e+21").latex).toBe("10^{21}");
+    expect(formatAnswer(2 ** 100, "1.26765060023e+30", "fraction").latex).toBe("1.26765060023\\times 10^{30}");
+  });
+
+  it("leaves ordinary decimals alone", () => {
+    expect(decimalAnswer("1234.5")).toEqual({ latex: "1234.5", text: "1234.5" });
+    expect(decimalAnswer("-0.25").latex).toBe("-0.25");
   });
 });
